@@ -126,9 +126,24 @@ GITHUB_TOKEN=… node scripts/smoke.mjs   # 只读工具的在线冒烟测试
 - **Schema**：`anyOf`/`$ref`/`$defs`/`minimum`/`maximum`/`minLength`/`x-mcp-header` 无法在宿主
   schema DSL 中表达，会被丢弃；可表达的部分（`type`、`oneOf`、`properties`、`required`、`items`、
   `enum`、`const`）完整保留。
-- **输出**：不强制上游 `outputSchema`。handler 返回 JSON 对象，由渲染层格式化为缩进文本——模型读到的正是它。
+- **输出**：不强制上游 `outputSchema`——插件声明 `output.schema = {type: 'json'}`。handler 返回 JSON
+  值（对象，以及上游本身返回的数组或纯文本字符串），由渲染层格式化为缩进文本——模型读到的正是它。
 - **权限**：不预检 token scope，由 GitHub 返回常规 403/404。
 - **写操作**：与上游一致，写工具会真正修改数据。用 `readOnly: true` 或 `excludeTools` 限制会话。
+
+### 有意偏差
+
+每个工具调用的端点与参数都与上游一致；差异只在**渲染结果的外形**上，且均为有意为之：
+
+| 偏差 | 位置 | 理由 |
+| --- | --- | --- |
+| 列表结果包成 `{items: [...], page, per_page}`（目录列举包成 `{directory: [...]}`），而非上游的裸数组 | `repos.js`、`issues.js`、`pull_requests.js` 的列表工具，以及 `get_file_contents` | 信封自带分页信息，在渲染文本中自解释；宿主并不强制输出 schema |
+| `ui_get` 返回 `{method, <method>: <payload>}` | `context.js` | 与上游声明的 `UIGetOutput` 外形一致 |
+| 上游以流式/重定向返回的辅助工具（workflow artifact、job logs、workflow-run log URL）只返回 API 端点 | `actions.js` | 宿主工具返回 JSON 而非二进制流；返回的端点会 302 到工件本身 |
+| 受特性开关门控的分支（`ThreadResolutionReason`、`update_issue_suggestions`、MCP-App awaiting-form）不再门控 | `pull_requests.js`、`issues_granular.js` | 特性开关是上游服务端概念；这里一律开启 |
+| 破坏性写操作前不做交互式确认（上游对 `delete_repository` 等会 elicitation） | `repos.js` | 本宿主没有 elicitation 通道；用 `readOnly: true` 兜底 |
+
+未列出的部分均为对上游 Go handler 的忠实移植。
 
 ## 许可
 

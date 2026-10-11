@@ -14,6 +14,7 @@ import { handlers } from '../src/handlers/index.js';
 import { toToolParameters } from '../src/schema.js';
 import { assertSupportedJsonSchema } from './helpers/dialect.mjs';
 import { validateParameterSpec } from './helpers/author-spec.mjs';
+import { handlerContext, sampleArgs } from './helpers/mock-client.mjs';
 
 let dshTools = null;
 try {
@@ -24,10 +25,13 @@ try {
 const available = typeof dshTools?.defineTool === 'function';
 
 let plugin = null;
+let pluginModule = null;
 try {
-  plugin = await import('../src/index.js');
+  pluginModule = await import('../src/index.js');
+  plugin = typeof pluginModule.default === 'function' ? pluginModule.default : null;
 } catch {
   plugin = null;
+  pluginModule = null;
 }
 
 /** A Cordis context whose `tools` service only records registrations. */
@@ -123,8 +127,8 @@ test('apply() honours readOnly and toolset selection', { skip: !available || plu
   assert.ok(expected > 0 && expected < definitions.length);
 });
 
-test('the plugin Config applies its defaults', { skip: plugin === null }, () => {
-  const resolved = plugin.Config({ token: 'abc' });
+test('the plugin Config applies its defaults', { skip: pluginModule === null }, () => {
+  const resolved = pluginModule.Config({ token: 'abc' });
   assert.equal(resolved.token, 'abc');
   assert.equal(resolved.host, 'github.com');
   assert.equal(resolved.timeoutMs, 60_000);
@@ -172,6 +176,37 @@ test('the author spec validator agrees with the real compiler', { skip: !availab
       }),
     );
   }
+});
+
+test('every tool executes through defineTool with schema-derived arguments', { skip: !available }, async () => {
+  const problems = [];
+  for (const definition of definitions) {
+    const handler = handlers[definition.name];
+    if (typeof handler !== 'function') {
+      problems.push(`${definition.name}: no handler`);
+      continue;
+    }
+    const tool = dshTools.defineTool({
+      name: definition.name,
+      description: definition.description,
+      parameters: toToolParameters(definition.inputSchema),
+      timeoutMs: 1000,
+      output: { schema: { type: 'object', additionalProperties: true }, render: () => [] },
+      async execute(args) {
+        return handler(args ?? {}, handlerContext());
+      },
+    });
+    const args = sampleArgs(toToolParameters(definition.inputSchema));
+    try {
+      const result = await tool.execute(args, { signal: undefined });
+      if (result === undefined) problems.push(`${definition.name}: returned undefined`);
+      else JSON.stringify(result);
+    } catch (error) {
+      if (error?.name === 'ToolArgsError') problems.push(`${definition.name}: argument validation rejected the sample args — ${error.message}`);
+      else if (!(error instanceof Error) || !error.message) problems.push(`${definition.name}: threw ${String(error)}`);
+    }
+  }
+  assert.deepEqual(problems, []);
 });
 
 test('the generated toolsets cover the definitions', { skip: !available }, () => {

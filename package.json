@@ -4,6 +4,7 @@
   "description": "The full github-mcp-server tool set as native DeepSeek Harness tools: 131 GitHub tools (repos, issues, pull requests, actions, code security, discussions, projects, notifications, gists, copilot) registered directly on the host `tools` service — no MCP server, no child process, no transport.",
   "type": "module",
   "main": "src/index.js",
+  "icon": "./icon.svg",
   "exports": {
     ".": "./src/index.js",
     "./cordis.patch.yml": "./cordis.patch.yml",
@@ -38,6 +39,8 @@
     "scripts",
     "icon.svg",
     "README.md",
+    "README.zh.md",
+    "CHANGELOG.md",
     "LICENSE"
   ],
   "license": "MIT",
@@ -56,6 +59,7 @@
   },
   "devDependencies": {
     "@deepseek-ai/dsh-tools": "0.2.0-rc.2",
-    "@deepseek-ai/schemastery": "3.18.4"
+    "@deepseek-ai/schemastery": "3.18.4",
+    "js-yaml": "^4.1.0"
   }
 }

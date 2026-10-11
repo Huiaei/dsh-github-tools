@@ -115,8 +115,10 @@ async function getTeamMembers(args, ctx) {
       }
     }`;
   const data = await ctx.client.graphql(query, { org, slug: teamSlug }, { signal: ctx.signal });
+  // Upstream returns an empty list rather than an error when the team has no members
+  // (context_tools.go: `var members []string` … `if members == nil { members = []string{} }`).
   const team = data?.organization?.team;
-  if (!team) fail(`team not found: ${org}/${teamSlug}`);
+  if (!team) return [];
   return (team.members?.nodes ?? []).map((member) => member.login);
 }
 
@@ -149,27 +151,49 @@ async function uiGet(args, ctx) {
   const owner = requireString(args, 'owner');
   const repo = optionalString(args, 'repo');
   if (method !== 'issue_types' && repo === undefined) fail('missing required argument: repo');
+  // Upstream's output is `UIGetOutput{method, <method>: <payload>}`: the method name is both
+  // a discriminator and the key its payload is nested under (typed_copilot_ui_outputs.go:280).
+  return { method, [method]: await uiGetPayload(method, ctx, owner, repo) };
+}
 
+/** The per-method `ui_get` payload, nested under the method key. */
+async function uiGetPayload(method, ctx, owner, repo) {
   switch (method) {
     case 'labels': {
       const query = `
-        query($owner: String!, $name: String!) {
+        query($owner: String!, $name: String!, $cursor: String) {
           repository(owner: $owner, name: $name) {
-            labels(first: 100) {
+            labels(first: 100, after: $cursor) {
               totalCount
+              pageInfo { hasNextPage endCursor }
               nodes { id name color description }
             }
           }
         }`;
-      const data = await ctx.client.graphql(query, { owner, name: repo }, { signal: ctx.signal });
-      const connection = data?.repository?.labels;
-      const labels = (connection?.nodes ?? []).map((label) => ({
-        id: String(label.id),
-        name: label.name,
-        color: label.color,
-        description: label.description,
-      }));
-      return { labels, totalCount: connection?.totalCount ?? labels.length, has_more: false };
+      const labels = [];
+      let cursor = null;
+      let totalCount = 0;
+      let hasMore = false;
+      for (let page = 1; ; page += 1) {
+        const data = await ctx.client.graphql(query, { owner, name: repo, cursor }, { signal: ctx.signal });
+        const connection = data?.repository?.labels;
+        for (const label of connection?.nodes ?? []) {
+          labels.push({
+            id: String(label.id),
+            name: label.name,
+            color: label.color,
+            description: label.description,
+          });
+        }
+        totalCount = connection?.totalCount ?? labels.length;
+        if (!connection?.pageInfo?.hasNextPage) break;
+        if (page >= UI_GET_MAX_PAGES) {
+          hasMore = true;
+          break;
+        }
+        cursor = connection.pageInfo.endCursor;
+      }
+      return { labels, totalCount, has_more: hasMore };
     }
     case 'assignees': {
       const { items, hasMore } = await collect(ctx.client, `/repos/${seg(owner)}/${seg(repo)}/assignees`, { signal: ctx.signal });
@@ -193,8 +217,8 @@ async function uiGet(args, ctx) {
     }
     case 'issue_types': {
       const types = await ctx.client.get(`/orgs/${seg(owner)}/issue-types`, { signal: ctx.signal });
-      const list = Array.isArray(types) ? types : [];
-      return { issue_types: list, totalCount: list.length, has_more: false };
+      // `issue_types` is the one method whose payload is a bare array (UIGetOutput.IssueTypes).
+      return Array.isArray(types) ? types : [];
     }
     case 'branches': {
       const { items, hasMore } = await collect(ctx.client, `/repos/${seg(owner)}/${seg(repo)}/branches`, { signal: ctx.signal });

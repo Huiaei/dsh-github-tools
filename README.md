@@ -145,11 +145,28 @@ generated schemas are checked against the real dialect without the harness insta
 - **Schemas**: normalized to the harness dialect — `anyOf`/`$ref`/`$defs`/`minimum`/`maximum`/
   `minLength`/`x-mcp-header` are not expressible there and are dropped; the constraint keywords
   that remain (`type`, `oneOf`, `properties`, `required`, `items`, `enum`, `const`) are preserved.
-- **Output**: the upstream `outputSchema` is not enforced. Handlers return JSON objects which are
-  rendered as an indented text block, which is what the model reads anyway.
+- **Output**: the upstream `outputSchema` is not enforced — the plugin declares
+  `output.schema = {type: 'json'}`. Handlers return JSON values (objects, plus arrays or raw
+  strings where the upstream tool does), which are rendered as an indented text block; that is
+  what the model reads anyway.
 - **Scopes**: the plugin does not pre-check token scopes; GitHub returns the usual 403/404.
 - **Write tools**: exactly as in the upstream server, write tools perform real changes. Use
   `readOnly: true` or `excludeTools` to restrict a session.
+
+### Deviations
+
+Every tool call reaches the same endpoint with the same parameters as upstream. The differences
+are in the shape of the *rendered result*, and each one is deliberate:
+
+| Deviation | Where | Why |
+| --- | --- | --- |
+| A list result is wrapped as `{items: [...], page, per_page}` — or `{directory: [...]}` for a directory listing — instead of upstream's bare array | the list tools in `repos.js`, `issues.js`, `pull_requests.js`, plus `get_file_contents` | the envelope carries pagination and is self-describing in the rendered text; the harness imposes no output schema on it |
+| `ui_get` returns `{method, <method>: <payload>}` | `context.js` | matches upstream's declared `UIGetOutput` shape |
+| Helpers that upstream streams or redirects (workflow artifacts, job logs, workflow-run log URLs) return the API endpoint instead of a body | `actions.js` | a host tool returns JSON, not a binary stream; the returned endpoint 302-redirects to the artifact |
+| Feature-flag-gated branches (`ThreadResolutionReason`, `update_issue_suggestions`, the MCP-App awaiting-form path) are not gated | `pull_requests.js`, `issues_granular.js` | feature flags are an upstream server-side concept; the behaviour here is always on |
+| No interactive confirmation before destructive writes (upstream elicits for e.g. `delete_repository`) | `repos.js` | there is no elicitation channel in this host; `readOnly: true` is the guard |
+
+Anything not listed above is a faithful port of the upstream Go handler.
 
 ## License
 

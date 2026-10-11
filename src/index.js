@@ -105,10 +105,11 @@ function makeLogger(ctx) {
 /**
  * Build the harness tool definition for one generated tool.
  *
- * `output.schema` is intentionally the permissive `{type: 'object', additionalProperties: true}`:
- * the upstream output schemas use `$ref`/`$defs`/`anyOf`, none of which the author
- * schema DSL supports, and the rendered text block (not the structured schema) is
- * what the model sees. Every handler therefore returns a JSON object.
+ * `output.schema` is intentionally the permissive `{type: 'json'}` (it compiles to an
+ * unconstrained schema): the upstream output schemas use `$ref`/`$defs`/`anyOf`, none of
+ * which the author schema DSL supports, and upstream tools return a mix of objects,
+ * arrays and plain strings. The rendered text block (not the structured schema) is
+ * what the model sees, so a handler may return any JSON value.
  */
 function buildTool(definition, handler, context) {
   const readOnly = definition.annotations?.readOnlyHint === true;
@@ -120,7 +121,7 @@ function buildTool(definition, handler, context) {
     timeoutMs: context.config.timeoutMs,
     isConcurrencySafe: () => readOnly,
     output: {
-      schema: { type: 'object', additionalProperties: true },
+      schema: { type: 'json' },
       render: renderOutput,
     },
     async execute(args, exec) {

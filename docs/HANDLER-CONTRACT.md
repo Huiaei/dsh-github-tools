@@ -33,11 +33,14 @@ Hard rules:
    `@deepseek-ai/*`, no registration, no schema work, no rendering.
 2. The keys of the default export **must equal** the tool names assigned to this file in
    `scripts/assignment.json` — same spelling, no extras, no omissions.
-3. A handler is `async (args, ctx) => plainObject`. `args` is the raw tool input object
+3. A handler is `async (args, ctx) => value`. `args` is the raw tool input object
    (already validated by `defineTool` against the parameter spec compiled from the upstream
    `inputSchema`, but **treat every field as possibly absent**). The return value must be a
-   **JSON-serializable object** — never `undefined`, `null`, a string, an array, or a class
-   instance.
+   **JSON-serializable value** — never `undefined`, a class instance, or a function. Prefer a
+   plain object; return an **array** only where the upstream tool returns a list (e.g.
+   `get_teams`, the `list_*` tools) and a **string** only where upstream returns raw text
+   (e.g. job logs). The plugin declares `output.schema = {type: 'json'}`, so all three shapes
+   are accepted.
 4. Never mutate `args`. Never read `process.env`. Never touch the network directly —
    always go through `ctx.client`.
 5. Errors: `fail('message')` (from `../util.js`) throws the tool-visible error. Never
