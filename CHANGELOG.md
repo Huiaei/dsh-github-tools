@@ -17,8 +17,18 @@ Adds a Settings-panel entry and a one-click credential link.
   stored in plaintext, the repository was written by an AI, and use is entirely at your own
   risk. A new "Token and secret storage" section documents exactly where the token lands,
   who can read it, why `redactSecrets` does not help, and the three ways to keep it out of
-  the file. Install instructions were corrected to the profile-level flow that actually
-  works (dependency + `dsh.profile.bundles` + restart).
+  the file.
+- **Install instructions that match the product.** The README's install section now leads with
+  the supported `dsh plugin --profile <profile> add <spec>` command, documents the spec grammar
+  it accepts (git shorthand, hosted repository URL, npm name, absolute tarball or checkout
+  path), and states what DSH does on top of pnpm: the `package.json` lock, the peer and
+  runtime check, the bundle-patch validation, and the automatic `dsh.profile.bundles`
+  reconciliation. The GUI path and the hand-rolled pnpm fallback follow it.
+- **`README.zh.md` is a full translation** of the English README, section for section and
+  table for table, with a language switcher at the top of both.
+- Repository hygiene: a sectioned `.gitignore` (secrets, dependencies, pack artifacts, build
+  output, logs, editor and OS junk, DSH session state) and absolute-path cleanup in
+  `docs/HANDLER-CONTRACT.md`.
 
 ## 1.2.0 — unreleased
 

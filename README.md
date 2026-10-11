@@ -1,5 +1,7 @@
 # dsh-github-tools
 
+**English** · [简体中文](README.zh.md)
+
 > [!WARNING]
 > **Your GitHub token is stored in plaintext.**
 > This plugin has no encryption, no keyring, and no secret manager. If you type a token into
@@ -77,19 +79,59 @@ Installing a bundle is a **profile-level** operation: the bundle patch inserts o
 process-wide row, so every agent preset in that profile gets the tools without declaring
 anything. A restart of DSH is required for the row to activate.
 
-### 1. Through the plugin manager (recommended)
+### 1. With the `dsh` CLI (the supported way)
 
-In the GUI, or with the `plugin_manager` tool:
+DSH ships a `dsh` command that manages a profile's plugins:
+
+```bash
+dsh plugin --profile <profile> add <spec>
+```
+
+It runs pnpm **inside the profile directory** and then reconciles the result: it takes a lock
+on the profile's `package.json`, checks the plugin's peer and runtime requirements, warns when
+a package declares no `dsh.bundle`, validates the bundle's patch files, and — if the package
+declares one — **appends the package to `dsh.profile.bundles` for you**. There is nothing to
+edit by hand afterwards.
+
+`<spec>` is anything pnpm accepts; DSH validates the shape before use. This package is **not
+published to the npm registry**, so use the repository or a local path:
+
+| spec kind | example |
+| --- | --- |
+| git repository | `dsh plugin --profile desktop add github:Huiaei/dsh-github-tools` |
+| hosted repo URL | `dsh plugin --profile desktop add https://github.com/Huiaei/dsh-github-tools` |
+| local tarball | `dsh plugin --profile desktop add /abs/path/dsh-github-tools-1.3.0.tgz` |
+| local checkout | `dsh plugin --profile desktop add /abs/path/dsh-github-tools` |
+| npm package | `dsh plugin --profile desktop add dsh-github-tools` (once it is published) |
+
+A local path must be absolute; `file:` and `link:` prefixes are accepted as well.
+
+Two constraints:
+
+- `--profile` is mandatory — a plugin belongs to exactly one profile.
+- For the reserved `desktop` profile, the app must have initialized that profile once and must
+  be **fully quit** while the command runs: *"Open DeepSeek Harness Desktop once to initialize
+  its profile, then fully quit it before running `dsh plugin --profile desktop`."*
+
+On DSH Desktop the executable is `<install>/resources/runtime/cli/bin/dsh.cmd` (Windows) — put
+it on `PATH` or call it by full path. On an npm-installed harness, `dsh` is already on `PATH`.
+
+DSH intercepts a few subcommands of its own (`allow-version`, `revoke-version`, …); everything
+else is forwarded to pnpm verbatim, so `remove`, `why`, `list` and friends behave as usual.
+
+### 2. From the GUI
+
+The Plugins page installs from the same spec grammar. The equivalent tool call is:
 
 ```
 plugin_manager({ action: "install_bundle", target: "<path to .tgz, or an npm spec>" })
 ```
 
-`target` accepts a local tarball path, a directory, or a registry spec. The manager installs
-it into the current profile with pnpm, adds it to `dsh.profile.bundles`, and reports
-`application: "restart-required"`.
+It reports `application: "restart-required"`.
 
-### 2. By hand
+### 3. By hand
+
+Only if neither of the above is available:
 
 ```bash
 cd "$DSH_HOME/profiles/<profile>"
@@ -105,13 +147,9 @@ then add the package name to that profile's `package.json`:
 ```
 
 and restart DSH. Both edits are required: the dependency puts the code on disk, the bundle
-entry activates its patch.
-
-### 3. From a source checkout
-
-Same as (2), but point the dependency at the checkout instead of a tarball — `pnpm add
-/path/to/dsh-github-tools`, or a `"file:…"` spec in `dependencies`. There is no build step,
-so a checkout runs as-is.
+entry activates its patch. A source checkout works the same way — point the dependency at the
+checkout (`pnpm add /path/to/dsh-github-tools`, or a `"file:…"` spec) instead of a tarball.
+There is no build step, so a checkout runs as-is.
 
 ### Verify it loaded
 
