@@ -165,6 +165,7 @@ are in the shape of the *rendered result*, and each one is deliberate:
 | Helpers that upstream streams or redirects (workflow artifacts, job logs, workflow-run log URLs) return the API endpoint instead of a body | `actions.js` | a host tool returns JSON, not a binary stream; the returned endpoint 302-redirects to the artifact |
 | Feature-flag-gated branches (`ThreadResolutionReason`, `update_issue_suggestions`, the MCP-App awaiting-form path) are not gated | `pull_requests.js`, `issues_granular.js` | feature flags are an upstream server-side concept; the behaviour here is always on |
 | No interactive confirmation before destructive writes (upstream elicits for e.g. `delete_repository`) | `repos.js` | there is no elicitation channel in this host; `readOnly: true` is the guard |
+| Project-item titles are stripped of HTML by a hand-written sanitizer rather than an HTML tokenizer | `governance.js` (`sanitizePlainText`) | ports upstream's `sanitize.PlainText` (code-fence info removal + tag stripping + angle neutralisation) without a new dependency; it does not decode HTML entities the way upstream's tokenizer does |
 
 Anything not listed above is a faithful port of the upstream Go handler.
 

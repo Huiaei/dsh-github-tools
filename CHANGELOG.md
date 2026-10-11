@@ -18,6 +18,14 @@ First release: the github-mcp-server tool set as native DeepSeek Harness tools.
 - Tests: inventory/schema-dialect, author-spec validator, HTTP client, toolset selection,
   handler contract (all 131), and real-harness checks against `@deepseek-ai/dsh-tools`.
 - `scripts/smoke.mjs` exercises read-only tools against the live GitHub API.
+- Two read-only audits against the upstream Go source (all 14 handler files) with the
+  findings applied: a `list_pull_requests` projection bug that suppressed five fields, and
+  in `governance.js` the loss of falsy project-field values, a missing `GraphQL-Features:
+  issue_fields` header on the attached-Issue-Fields metadata query, unprojected custom
+  property definitions, unvalidated `default_value`, null project timestamps, the wrong
+  title sanitizer, a missing `projectItemIssueID` guard, and five project-items batch
+  deviations (short-circuit, error mapping, echoed database ID, unconfirmed-chunk handling,
+  empty `ref`).
 - All 131 tools are wired to a handler and verified by `scripts/verify.mjs`.
 - The six largest handler files were audited line-by-line against the upstream Go source. The
   audit's one high-severity finding — `list_pull_requests` dropped `merged_by`, `milestone`,

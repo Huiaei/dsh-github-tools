@@ -85,6 +85,83 @@ function sanitizeContent(value) {
   return value.replace(INVISIBLE_CHARACTER, '');
 }
 
+/** Longest code-fence info string `FilterCodeFenceMetadata` still trusts. */
+const MAX_CODE_FENCE_INFO_LENGTH = 48;
+
+/**
+ * Port of `FilterCodeFenceMetadata` (pkg/sanitize/sanitize.go).
+ *
+ * A fenced code block keeps its backticks, but an info string that could hide
+ * instructions is dropped: only a single whitespace-free token of letters,
+ * digits and `+ - _ # .` is preserved.
+ */
+function sanitizeCodeFenceMetadata(input) {
+  if (input === '') return input;
+  let insideFence = false;
+  let fenceLength = 0;
+  let changed = false;
+  const lines = input.split('\n').map((line) => {
+    const [sanitized, toggles, length] = sanitizeCodeFenceLine(line, insideFence, fenceLength);
+    if (toggles) {
+      insideFence = !insideFence;
+      fenceLength = insideFence ? length : 0;
+    }
+    if (sanitized !== line) changed = true;
+    return sanitized;
+  });
+  return changed ? lines.join('\n') : input;
+}
+
+function sanitizeCodeFenceLine(line, insideFence, expectedFenceLength) {
+  const start = line.indexOf('```');
+  if (start === -1 || /\S/.test(line.slice(0, start))) return [line, false, expectedFenceLength];
+  let end = start;
+  while (end < line.length && line[end] === '`') end += 1;
+  const length = end - start;
+  if (length < 3) return [line, false, expectedFenceLength];
+  const fence = line.slice(0, end);
+  const rest = line.slice(end);
+  if (insideFence) {
+    if (expectedFenceLength !== 0 && length !== expectedFenceLength) return [line, false, expectedFenceLength];
+    return [fence, true, length];
+  }
+  const trimmed = rest.trim();
+  const trustworthy =
+    trimmed !== '' &&
+    !/\s/.test(trimmed) &&
+    trimmed.length <= MAX_CODE_FENCE_INFO_LENGTH &&
+    /^[\p{L}\p{N}+_#.-]+$/u.test(trimmed);
+  if (!trustworthy) return [fence, true, length];
+  if (rest === trimmed) return [line, true, length];
+  if (rest.startsWith(' ')) {
+    if (rest === ` ${trimmed}`) return [line, true, length];
+    return [`${fence} ${trimmed}`, true, length];
+  }
+  return [fence + trimmed, true, length];
+}
+
+/** Drop HTML tags and neutralise any stray angle bracket left behind. */
+function stripHtmlTags(input) {
+  return input.replace(/<[^>]*>/g, '').replace(/[<>]/g, (char) => (char === '<' ? '&lt;' : '&gt;'));
+}
+
+/**
+ * Port of `sanitize.PlainText` (pkg/sanitize/sanitize.go), which upstream uses
+ * for issue, pull-request and draft-issue titles (minimal_types.go:1282, :1319,
+ * :1356).
+ *
+ * `sanitizeContent` only drops invisible characters, so markup in a title would
+ * reach the tool output verbatim. PlainText additionally removes a code fence's
+ * hidden info string and neutralises HTML — upstream sanitises through
+ * bluemonday's StrictPolicy, which allows no elements — so a title can never
+ * carry markup.
+ */
+function sanitizePlainText(value) {
+  if (typeof value !== 'string' || value === '') return value ?? '';
+  const filtered = sanitizeCodeFenceMetadata(sanitizeContent(value));
+  return sanitizeCodeFenceMetadata(sanitizeContent(stripHtmlTags(filtered)));
+}
+
 /** Drop JSON `omitempty` zero values, matching the typed output structs. */
 function omitEmpty(object) {
   const out = {};
@@ -637,6 +714,36 @@ function customPropertyValueOutput(value) {
   });
 }
 
+/**
+ * `CustomPropertyDefinitionOutput` (typed_governance_outputs.go:69-78).
+ *
+ * The declared output schema pins each definition to these eight keys with
+ * `additionalProperties: false` and a non-nullable `description` /
+ * `allowed_values` / `values_editable_by`, so a null-valued optional key is
+ * omitted rather than emitted — which is what the Go struct's pointer and
+ * `omitzero` fields do. `required` and `require_explicit_values` are kept when
+ * they are `false`, so this must not go through `omitEmpty`.
+ */
+function customPropertyDefinitionOutput(definition) {
+  const out = {
+    property_name: definition?.property_name ?? '',
+    value_type: definition?.value_type ?? '',
+  };
+  for (const key of [
+    'required',
+    'default_value',
+    'description',
+    'allowed_values',
+    'values_editable_by',
+    'require_explicit_values',
+  ]) {
+    const value = definition?.[key];
+    if (value === undefined || value === null) continue;
+    out[key] = value;
+  }
+  return out;
+}
+
 /** Port of `parseCustomProperties` (custom_properties.go:472). */
 function parseCustomProperties(args, validateItem) {
   const raw = args?.properties;
@@ -685,6 +792,14 @@ function validateCustomPropertyDefinition(item) {
     return `value_type must be one of ${VALUE_TYPES.join(', ')}`;
   }
   if (item.required !== undefined && typeof item.required !== 'boolean') return 'required must be a boolean';
+  if (item.default_value !== undefined && item.default_value !== null) {
+    // `customPropertyDefinitionSchema()` types default_value as
+    // OneOf(string, array-of-string, null) (custom_properties.go:318-328).
+    const isString = typeof item.default_value === 'string';
+    const isStringArray =
+      Array.isArray(item.default_value) && item.default_value.every((entry) => typeof entry === 'string');
+    if (!isString && !isStringArray) return 'default_value must be a string, an array of strings, or null';
+  }
   if (item.description !== undefined && item.description !== null && typeof item.description !== 'string') {
     return 'description must be a string or null';
   }
@@ -763,7 +878,7 @@ async function writeCustomPropertyDefinitions(ctx, apiURL, sourceType, requested
 
   try {
     const updated = await ctx.client.patch(apiURL, { properties: merged }, { signal: ctx.signal });
-    return asArray(updated);
+    return asArray(updated).map(customPropertyDefinitionOutput);
   } catch (error) {
     fail(`failed to update ${sourceType} custom properties: ${describe(error)}`);
   }
@@ -796,7 +911,7 @@ async function customPropertiesRead(args, ctx) {
       } catch (error) {
         fail(`failed to get organization custom properties: ${describe(error)}`);
       }
-      return { method: 'read', level, definitions: asArray(definitions) };
+      return { method: 'read', level, definitions: asArray(definitions).map(customPropertyDefinitionOutput) };
     }
     case 'enterprise': {
       const enterprise = requireString(args, 'enterprise');
@@ -808,7 +923,7 @@ async function customPropertiesRead(args, ctx) {
       } catch (error) {
         fail(`failed to get enterprise custom properties: ${describe(error)}`);
       }
-      return { method: 'read', level, definitions: asArray(definitions) };
+      return { method: 'read', level, definitions: asArray(definitions).map(customPropertyDefinitionOutput) };
     }
     default:
       fail(`unknown level: ${quote(level)} (expected 'repository', 'organization', or 'enterprise')`);
@@ -970,6 +1085,15 @@ function minimalUser(user) {
   });
 }
 
+/**
+ * Go's zero `github.Timestamp` as JSON. `convertToMinimalProject`
+ * (minimal_types.go:1208) wraps every timestamp in `new(...)`, so an absent
+ * timestamp is a non-nil pointer to the zero time and marshals as this string
+ * rather than as `null` — which the declared output schema, typing the project
+ * timestamps as non-nullable `string`/`date-time`, could not accept.
+ */
+const ZERO_TIMESTAMP = '0001-01-01T00:00:00Z';
+
 /** `convertToMinimalProject` (minimal_types.go:1208). */
 function minimalProject(project) {
   if (!project) return undefined;
@@ -979,10 +1103,10 @@ function minimalProject(project) {
     title: project.title ?? '',
     description: project.description ?? '',
     public: project.public ?? false,
-    closed_at: project.closed_at ?? null,
-    created_at: project.created_at ?? null,
-    updated_at: project.updated_at ?? null,
-    deleted_at: project.deleted_at ?? null,
+    closed_at: project.closed_at ?? ZERO_TIMESTAMP,
+    created_at: project.created_at ?? ZERO_TIMESTAMP,
+    updated_at: project.updated_at ?? ZERO_TIMESTAMP,
+    deleted_at: project.deleted_at ?? ZERO_TIMESTAMP,
     number: project.number ?? 0,
     short_description: project.short_description ?? '',
   };
@@ -1022,12 +1146,18 @@ function projectFieldValue(value) {
 }
 
 function projectFieldValueOutput(field) {
-  return omitEmpty({
+  const out = omitEmpty({
     id: field?.id,
     name: field?.name,
     data_type: field?.data_type,
-    value: projectFieldValue(field?.value),
   });
+  // `omitEmpty` also drops `false`, `0` and `''`, but Go's `omitempty` on the
+  // `any` value field skips only a nil interface (minimal_types.go:491) and a
+  // `json.RawMessage` is non-empty for `false`/`0`/`""` (projects_types.go:303).
+  // A `true_false` field set to false, or a NUMBER field set to 0, must keep it.
+  const value = projectFieldValue(field?.value);
+  if (value !== undefined) out.value = value;
+  return out;
 }
 
 function projectTextOutput(value) {
@@ -1084,7 +1214,7 @@ function minimalProjectItemContent(content) {
     id: content.id,
     node_id: content.node_id,
     number: content.number,
-    title: sanitizeContent(content.title ?? ''),
+    title: sanitizePlainText(content.title ?? ''),
     state: content.state,
     state_reason: content.state_reason,
     html_url: content.html_url,
@@ -1474,10 +1604,14 @@ async function resolveIssueFieldForUpdate(ctx, owner, ownerType, projectNumber, 
   for (;;) {
     let data;
     try {
-      data = await ctx.client.graphql(
+      // Gated behind the `issue_fields` feature flag (projects_resolver.go:339);
+      // without the header GitHub answers with one of ISSUE_FIELD_SCHEMA_ERRORS
+      // and the attached-Issue-Fields path is silently never taken.
+      data = await graphqlWithFeatures(
+        ctx,
         query,
         { owner, projectNumber, first: PROJECT_RESOLVER_PAGE_SIZE, after },
-        { signal: ctx.signal },
+        ['issue_fields'],
       );
     } catch (error) {
       if (ISSUE_FIELD_SCHEMA_ERRORS.includes(describe(error))) return field;
@@ -2104,6 +2238,33 @@ async function setIssueFieldValues(ctx, issueID, issueFields) {
   return { id: issue?.id == null ? '' : String(issue.id), url: issue?.url == null ? '' : String(issue.url) };
 }
 
+/**
+ * `projectItemIssueID` (projects.go:1533).
+ *
+ * Attached Issue Fields may only be written to an Issue project item, and the
+ * node ID has to be the Issue's own — a pull-request or draft-issue item, or a
+ * generic content id, must be rejected before `setIssueFieldValue` sees it.
+ */
+function projectItemIssueID(item) {
+  if (item === undefined || item === null) {
+    failStructured('missing_metadata', '', 'project item metadata is missing', undefined);
+  }
+  const contentType = typeof item?.content_type === 'string' ? item.content_type : '';
+  if (contentType !== 'Issue') {
+    failStructured(
+      'unsupported_item_type',
+      contentType,
+      'attached Issue Fields can only be updated on Issue project items',
+      undefined,
+    );
+  }
+  const issueNodeID = item?.content?.issue?.node_id ?? item?.content?.node_id;
+  if (typeof issueNodeID !== 'string' || issueNodeID === '') {
+    failStructured('missing_metadata', contentType, 'project Issue item is missing its Issue node ID', undefined);
+  }
+  return issueNodeID;
+}
+
 async function updateProjectItemMethod(ctx, owner, ownerType, projectNumber, itemID, fieldValue) {
   const built = await buildUpdateProjectItem(ctx, owner, ownerType, projectNumber, fieldValue);
 
@@ -2115,10 +2276,7 @@ async function updateProjectItemMethod(ctx, owner, ownerType, projectNumber, ite
     } catch (error) {
       fail(`failed to get project item: ${describe(error)}`);
     }
-    const issueID = item?.content?.node_id ?? item?.content?.id;
-    if (issueID === undefined || issueID === null) {
-      failStructured('missing_metadata', '', 'project item metadata is missing', undefined);
-    }
+    const issueID = projectItemIssueID(item);
     const response = await setIssueFieldValues(ctx, issueID, [built.issueField]);
     return { method: 'update_project_item', issue_fields: { id: response.id, html_url: response.url } };
   }
@@ -2173,6 +2331,103 @@ function convertProjectFieldValue(field, value) {
       );
   }
   return undefined;
+}
+
+/** Go's `Ref map[string]any json:"ref,omitempty"` omits an empty map (projects_batch.go:35). */
+function batchRefOutput(ref) {
+  return ref !== undefined && ref !== null && Object.keys(ref).length > 0 ? ref : undefined;
+}
+
+/**
+ * `batchErrorFromResolution` (projects_batch.go:797-810): a structured
+ * resolution failure keeps its kind, hint and candidates instead of collapsing
+ * into the raw JSON blob `failStructured` threw.
+ */
+function batchErrorFromResolution(error) {
+  try {
+    const structured = JSON.parse(describe(error));
+    if (structured !== null && typeof structured === 'object' && typeof structured.error === 'string') {
+      const mapped = { code: structured.error, message: `${structured.error}: ${structured.name ?? ''}` };
+      if (structured.hint !== undefined) mapped.hint = structured.hint;
+      if (structured.candidates !== undefined) mapped.candidates = structured.candidates;
+      return mapped;
+    }
+  } catch {
+    // Not a structured resolution failure; report the raw message below.
+  }
+  return { code: 'resolution_failed', message: describe(error) };
+}
+
+/**
+ * `isGraphQLResponseError` (projects_batch_mutation.go:123): true when the
+ * response itself carried an `errors` array, false for a transport failure.
+ */
+function isGraphQLResponseError(error) {
+  return error instanceof GitHubApiError && Array.isArray(error.errors) && error.errors.length > 0;
+}
+
+/** `markChunkUnknown` (projects_batch.go:325): never overwrite a confirmed write. */
+function markProjectItemsUnknown(entries, writeResults, error) {
+  for (const entry of entries) {
+    const existing = writeResults.get(entry.index);
+    if (existing !== undefined && existing.status === 'succeeded') continue;
+    writeResults.set(entry.index, {
+      status: 'unknown',
+      error: { code: 'mutation_unconfirmed', message: describe(error) },
+    });
+  }
+}
+
+/** Record one confirmed `updateProjectV2ItemFieldValue` result (projects_batch.go:288). */
+function recordProjectItemWrite(entry, item, writeResults) {
+  const identity = { node_id: String(item.id) };
+  if (item.fullDatabaseId !== undefined && item.fullDatabaseId !== null && item.fullDatabaseId !== '') {
+    identity.full_database_id = String(item.fullDatabaseId);
+  }
+  // `ItemID: chunk[i].fullDatabaseID` is echoed for every resolved item, not
+  // only when the caller passed `item_id`.
+  if (entry.fullDatabaseID !== 0) identity.item_id = entry.fullDatabaseID;
+  writeResults.set(entry.index, { status: 'succeeded', item: omitEmpty(identity) });
+}
+
+/** `newUpdateProjectItemsResult` (projects_batch.go:766). */
+function buildProjectItemsBatchResult(total, parsed, writeResults) {
+  const output = [];
+  let succeeded = 0;
+  let failedCount = 0;
+  let unknown = 0;
+  for (let index = 0; index < total; index += 1) {
+    const entry = parsed.find((candidate) => candidate.index === index);
+    if (entry !== undefined && entry.status === 'failed') {
+      failedCount += 1;
+      output.push({ index, status: 'failed', ref: batchRefOutput(entry.ref), error: entry.error });
+      continue;
+    }
+    const result = writeResults.get(index);
+    if (result === undefined) {
+      unknown += 1;
+      output.push({ index, status: 'unknown', ref: batchRefOutput(entry?.ref) });
+      continue;
+    }
+    if (result.status === 'succeeded') {
+      succeeded += 1;
+      output.push({ index, status: 'succeeded', item: result.item, ref: batchRefOutput(entry?.ref) });
+    } else {
+      unknown += 1;
+      output.push({ index, status: 'unknown', error: result.error, ref: batchRefOutput(entry?.ref) });
+    }
+  }
+
+  return {
+    method: 'update_project_items',
+    batch: {
+      total,
+      succeeded,
+      failed: failedCount,
+      unknown,
+      results: output.map((entry) => defined(entry)),
+    },
+  };
 }
 
 /** `updateProjectItemsBatch` (projects_batch.go:66). */
@@ -2274,7 +2529,12 @@ async function updateProjectItemsBatch(ctx, owner, ownerType, projectNumber, arg
     parsed.push({ index, status: 'pending', ref, entry });
   }
 
-  const failed = parsed.filter((entry) => entry.status === 'failed');
+  // Upstream returns the all-failed result BEFORE resolving the project
+  // (projects_batch.go:109-111) and the field (:118), so a batch in which
+  // nothing parsed makes no API call and cannot fail on a bad project/field.
+  if (!parsed.some((entry) => entry.status === 'pending')) {
+    return buildProjectItemsBatchResult(items.length, parsed, new Map());
+  }
 
   const projectID = await resolveProjectNodeID(ctx, owner, ownerType, projectNumber);
   let field;
@@ -2300,6 +2560,7 @@ async function updateProjectItemsBatch(ctx, owner, ownerType, projectNumber, arg
   for (const entry of parsed) {
     if (entry.status === 'failed') continue;
     let itemID = null;
+    let fullDatabaseID = 0;
     try {
       if (entry.ref.node_id !== undefined) {
         if (typeof entry.ref.node_id !== 'string' || entry.ref.node_id === '') {
@@ -2315,6 +2576,7 @@ async function updateProjectItemsBatch(ctx, owner, ownerType, projectNumber, arg
         const item = await ctx.client.get(`${base}/items/${id}`, { signal: ctx.signal });
         if (!item?.node_id) throw new Error(`project item ${id}: response did not include a node id`);
         itemID = item.node_id;
+        fullDatabaseID = id;
       } else {
         const resolvedItem = await resolveProjectItemByIssueNumber(
           ctx,
@@ -2324,10 +2586,11 @@ async function updateProjectItemsBatch(ctx, owner, ownerType, projectNumber, arg
           entry.ref.issue_number,
         );
         itemID = resolvedItem.nodeID;
+        fullDatabaseID = resolvedItem.itemID;
       }
     } catch (error) {
       entry.status = 'failed';
-      entry.error = { code: 'resolution_failed', message: describe(error) };
+      entry.error = batchErrorFromResolution(error);
       continue;
     }
     if (seen.has(itemID)) {
@@ -2339,7 +2602,7 @@ async function updateProjectItemsBatch(ctx, owner, ownerType, projectNumber, arg
       continue;
     }
     seen.set(itemID, entry.index);
-    writes.push({ index: entry.index, itemID, ref: entry.ref });
+    writes.push({ index: entry.index, itemID, fullDatabaseID, ref: entry.ref });
   }
 
   const writeResults = new Map();
@@ -2362,9 +2625,26 @@ async function updateProjectItemsBatch(ctx, owner, ownerType, projectNumber, arg
     try {
       data = await ctx.client.graphql(query, variables, { signal: ctx.signal });
     } catch (error) {
-      for (const entry of chunk) {
-        writeResults.set(entry.index, { status: 'unknown', error: { code: 'mutation_unconfirmed', message: describe(error) } });
+      if (!isGraphQLResponseError(error)) {
+        // A transport or decoding failure leaves this chunk and every later one
+        // unconfirmed, so the batch stops instead of issuing mutations it cannot
+        // account for (projects_batch.go:294-307).
+        markProjectItemsUnknown(writes.slice(offset), writeResults, error);
+        return buildProjectItemsBatchResult(items.length, parsed, writeResults);
       }
+      // The response carried errors: only the aliases it did not populate are
+      // unknown, and the next chunk still runs (projects_batch.go:309).
+      chunk.forEach((entry, i) => {
+        const item = error.data?.[`item${i}`]?.projectV2Item;
+        if (item?.id === undefined || item?.id === null || item.id === '') {
+          writeResults.set(entry.index, {
+            status: 'unknown',
+            error: { code: 'mutation_unconfirmed', message: describe(error) },
+          });
+          return;
+        }
+        recordProjectItemWrite(entry, item, writeResults);
+      });
       continue;
     }
     chunk.forEach((entry, i) => {
@@ -2376,51 +2656,11 @@ async function updateProjectItemsBatch(ctx, owner, ownerType, projectNumber, arg
         });
         return;
       }
-      const identity = { node_id: String(item.id) };
-      if (item.fullDatabaseId !== undefined && item.fullDatabaseId !== null && item.fullDatabaseId !== '') {
-        identity.full_database_id = String(item.fullDatabaseId);
-      }
-      if (entry.ref.item_id !== undefined) identity.item_id = toPositiveInt(entry.ref.item_id, undefined);
-      writeResults.set(entry.index, { status: 'succeeded', item: omitEmpty(identity) });
+      recordProjectItemWrite(entry, item, writeResults);
     });
   }
 
-  const output = [];
-  let succeeded = 0;
-  let failedCount = 0;
-  let unknown = 0;
-  for (let index = 0; index < items.length; index += 1) {
-    const entry = parsed.find((candidate) => candidate.index === index);
-    if (entry !== undefined && entry.status === 'failed') {
-      failedCount += 1;
-      output.push({ index, status: 'failed', ref: entry.ref, error: entry.error });
-      continue;
-    }
-    const result = writeResults.get(index);
-    if (result === undefined) {
-      unknown += 1;
-      output.push({ index, status: 'unknown', ref: entry?.ref });
-      continue;
-    }
-    if (result.status === 'succeeded') {
-      succeeded += 1;
-      output.push({ index, status: 'succeeded', item: result.item, ref: entry?.ref });
-    } else {
-      unknown += 1;
-      output.push({ index, status: 'unknown', error: result.error, ref: entry?.ref });
-    }
-  }
-
-  return {
-    method: 'update_project_items',
-    batch: {
-      total: items.length,
-      succeeded,
-      failed: failedCount,
-      unknown,
-      results: output.map((entry) => defined(entry)),
-    },
-  };
+  return buildProjectItemsBatchResult(items.length, parsed, writeResults);
 }
 
 /** `createProjectStatusUpdate` (projects.go:1708). */
@@ -2842,13 +3082,13 @@ async function projectsWrite(args, ctx) {
       const itemRepo = requireString(args, 'item_repo');
       let itemNumber;
       if (itemType === 'issue') {
-        itemNumber = requireInt(args, 'issue_number');
         if (args?.issue_number === undefined) fail("issue_number is required when item_type is 'issue'");
+        itemNumber = requireInt(args, 'issue_number');
       } else if (itemType === 'pull_request') {
-        itemNumber = requireInt(args, 'pull_request_number');
         if (args?.pull_request_number === undefined) {
           fail("pull_request_number is required when item_type is 'pull_request'");
         }
+        itemNumber = requireInt(args, 'pull_request_number');
       } else {
         fail("item_type must be either 'issue' or 'pull_request'");
       }

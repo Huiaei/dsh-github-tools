@@ -142,6 +142,7 @@ GITHUB_TOKEN=… node scripts/smoke.mjs   # 只读工具的在线冒烟测试
 | 上游以流式/重定向返回的辅助工具（workflow artifact、job logs、workflow-run log URL）只返回 API 端点 | `actions.js` | 宿主工具返回 JSON 而非二进制流；返回的端点会 302 到工件本身 |
 | 受特性开关门控的分支（`ThreadResolutionReason`、`update_issue_suggestions`、MCP-App awaiting-form）不再门控 | `pull_requests.js`、`issues_granular.js` | 特性开关是上游服务端概念；这里一律开启 |
 | 破坏性写操作前不做交互式确认（上游对 `delete_repository` 等会 elicitation） | `repos.js` | 本宿主没有 elicitation 通道；用 `readOnly: true` 兜底 |
+| 项目条目标题由手写清洗器剥离 HTML，而非 HTML 分词器 | `governance.js`（`sanitizePlainText`） | 移植上游 `sanitize.PlainText`（去代码围栏信息串 + 剥标签 + 中性化尖括号）且不引新依赖；不像上游分词器那样解码 HTML 实体 |
 
 未列出的部分均为对上游 Go handler 的忠实移植。
 
