@@ -1,0 +1,32 @@
+# This bundle layer inserts the GitHub tool plugin process-wide, so every agent
+# preset gets the `github` tools without declaring anything.
+#
+# Do NOT also add a `github-tools` row to a preset. DSH registers tools by name
+# and a second registration of the same tool fails. To keep the tools out of a
+# composition, override this row by id in a later patch layer (`- id: github-tools`
+# with `disabled: true`) instead of duplicating it.
+#
+# Installing this bundle changes nothing else: no other plugin is touched.
+#
+# The entry name is PATH-RELATIVE on purpose. DSH anchors a relative `name:` to
+# the directory of the patch file that declared it, so this row always loads this
+# bundle's own `src/index.js` — whatever the package folder happens to be called.
+# A bare package name would instead have to match the installed folder name,
+# which couples this file to the npm package name.
+
+- insert:
+    - id: github-tools
+      name: './src/index.js'
+      config:
+        # The token is read from GITHUB_PERSONAL_ACCESS_TOKEN (then GITHUB_TOKEN,
+        # then GH_TOKEN) when this is left empty. Prefer the environment variable
+        # or the credentials service over committing a token here.
+        token: ''
+        # Upstream default tool set. Use ['all'] for all 131 tools, or name
+        # individual toolsets: repos, issues, pull_requests, users, context,
+        # actions, code_security, dependabot, discussions, gists, governance,
+        # labels, notifications, projects, security_advisories, copilot, …
+        toolsets:
+          - default
+        # Register only the tools the upstream server marks read-only.
+        readOnly: false

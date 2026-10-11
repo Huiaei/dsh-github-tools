@@ -1,0 +1,6 @@
+{
+  "meta": {
+    "title": "GitHub 工具集",
+    "description": "把 github-mcp-server 的完整工具集重写为 DSH 原生工具：仓库、Issue、Pull Request、Actions、代码安全、讨论、Projects、通知、Gist 与 Copilot。"
+  }
+}

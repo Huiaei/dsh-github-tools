@@ -1,0 +1,6 @@
+{
+  "meta": {
+    "title": "GitHub Tools",
+    "description": "The full github-mcp-server tool set as native DSH tools: repositories, issues, pull requests, actions, code security, discussions, projects, notifications, gists and Copilot."
+  }
+}

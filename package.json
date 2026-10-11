@@ -1,0 +1,61 @@
+{
+  "name": "dsh-github-tools",
+  "version": "1.0.0",
+  "description": "The full github-mcp-server tool set as native DeepSeek Harness tools: 131 GitHub tools (repos, issues, pull requests, actions, code security, discussions, projects, notifications, gists, copilot) registered directly on the host `tools` service — no MCP server, no child process, no transport.",
+  "type": "module",
+  "main": "src/index.js",
+  "exports": {
+    ".": "./src/index.js",
+    "./cordis.patch.yml": "./cordis.patch.yml",
+    "./package.json": "./package.json"
+  },
+  "peerDependencies": {
+    "@deepseek-ai/dsh-tools": "*",
+    "@deepseek-ai/schemastery": "*"
+  },
+  "peerDependenciesMeta": {
+    "@deepseek-ai/dsh-tools": {
+      "optional": true
+    },
+    "@deepseek-ai/schemastery": {
+      "optional": true
+    }
+  },
+  "engines": {
+    "node": ">=20",
+    "dsh": ">=0.1.7-rc.2"
+  },
+  "scripts": {
+    "test": "node --test \"tests/**/*.test.mjs\"",
+    "verify": "node scripts/verify.mjs",
+    "generate": "node scripts/generate.mjs"
+  },
+  "files": [
+    "src",
+    "cordis.patch.yml",
+    "locale",
+    "docs",
+    "scripts",
+    "icon.svg",
+    "README.md",
+    "LICENSE"
+  ],
+  "license": "MIT",
+  "keywords": [
+    "dsh",
+    "dsh-plugin",
+    "deepseek-harness",
+    "github",
+    "github-mcp-server",
+    "cordis"
+  ],
+  "dsh": {
+    "bundle": {
+      "patch": "./cordis.patch.yml"
+    }
+  },
+  "devDependencies": {
+    "@deepseek-ai/dsh-tools": "0.2.0-rc.2",
+    "@deepseek-ai/schemastery": "3.18.4"
+  }
+}

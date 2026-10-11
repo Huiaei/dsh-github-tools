@@ -1,0 +1,186 @@
+{
+  "toolsets": [
+    {
+      "constant": "ToolsetMetadataAll",
+      "id": "all",
+      "description": "Special toolset that enables all available toolsets",
+      "default": false,
+      "icon": "apps"
+    },
+    {
+      "constant": "ToolsetMetadataDefault",
+      "id": "default",
+      "description": "Special toolset that enables the default toolset configuration. When no toolsets are specified, this is the set that is enabled",
+      "default": false,
+      "icon": "check-circle"
+    },
+    {
+      "constant": "ToolsetMetadataContext",
+      "id": "context",
+      "description": "Tools that provide context about the current user and GitHub context you are operating in",
+      "default": true,
+      "icon": "person"
+    },
+    {
+      "constant": "ToolsetMetadataRepos",
+      "id": "repos",
+      "description": "GitHub Repository related tools",
+      "default": true,
+      "icon": "repo"
+    },
+    {
+      "constant": "ToolsetMetadataGit",
+      "id": "git",
+      "description": "GitHub Git API related tools for low-level Git operations",
+      "default": false,
+      "icon": "git-branch"
+    },
+    {
+      "constant": "ToolsetMetadataIssues",
+      "id": "issues",
+      "description": "GitHub Issues related tools",
+      "default": true,
+      "icon": "issue-opened"
+    },
+    {
+      "constant": "ToolsetMetadataPullRequests",
+      "id": "pull_requests",
+      "description": "GitHub Pull Request related tools",
+      "default": true,
+      "icon": "git-pull-request"
+    },
+    {
+      "constant": "ToolsetMetadataUsers",
+      "id": "users",
+      "description": "GitHub User related tools",
+      "default": true,
+      "icon": "people"
+    },
+    {
+      "constant": "ToolsetMetadataOrgs",
+      "id": "orgs",
+      "description": "GitHub Organization related tools",
+      "default": false,
+      "icon": "organization"
+    },
+    {
+      "constant": "ToolsetMetadataGovernance",
+      "id": "governance",
+      "description": "Repository governance tools for managing rulesets and custom properties at the repository, organization, and enterprise levels",
+      "default": false,
+      "icon": "law"
+    },
+    {
+      "constant": "ToolsetMetadataActions",
+      "id": "actions",
+      "description": "GitHub Actions workflows and CI/CD operations",
+      "default": false,
+      "icon": "workflow"
+    },
+    {
+      "constant": "ToolsetMetadataCodeQuality",
+      "id": "code_quality",
+      "description": "GitHub Code Quality related tools",
+      "default": false,
+      "icon": "code-square"
+    },
+    {
+      "constant": "ToolsetMetadataCodeSecurity",
+      "id": "code_security",
+      "description": "Code security related tools, such as GitHub Code Scanning",
+      "default": false,
+      "icon": "codescan"
+    },
+    {
+      "constant": "ToolsetMetadataSecretProtection",
+      "id": "secret_protection",
+      "description": "Secret protection related tools, such as GitHub Secret Scanning",
+      "default": false,
+      "icon": "shield-lock"
+    },
+    {
+      "constant": "ToolsetMetadataDependabot",
+      "id": "dependabot",
+      "description": "Dependabot tools",
+      "default": false,
+      "icon": "dependabot"
+    },
+    {
+      "constant": "ToolsetMetadataNotifications",
+      "id": "notifications",
+      "description": "GitHub Notifications related tools",
+      "default": false,
+      "icon": "bell"
+    },
+    {
+      "constant": "ToolsetMetadataDiscussions",
+      "id": "discussions",
+      "description": "GitHub Discussions related tools",
+      "default": false,
+      "icon": "comment-discussion"
+    },
+    {
+      "constant": "ToolsetMetadataGists",
+      "id": "gists",
+      "description": "GitHub Gist related tools",
+      "default": false,
+      "icon": "logo-gist"
+    },
+    {
+      "constant": "ToolsetMetadataSecurityAdvisories",
+      "id": "security_advisories",
+      "description": "Security advisories related tools",
+      "default": false,
+      "icon": "shield"
+    },
+    {
+      "constant": "ToolsetMetadataProjects",
+      "id": "projects",
+      "description": "GitHub Projects related tools",
+      "default": false,
+      "icon": "project"
+    },
+    {
+      "constant": "ToolsetMetadataStargazers",
+      "id": "stargazers",
+      "description": "GitHub Stargazers related tools",
+      "default": false,
+      "icon": "star"
+    },
+    {
+      "constant": "ToolsetLabels",
+      "id": "labels",
+      "description": "GitHub Labels related tools",
+      "default": false,
+      "icon": "tag"
+    },
+    {
+      "constant": "ToolsetMetadataCopilot",
+      "id": "copilot",
+      "description": "Copilot related tools",
+      "default": true,
+      "icon": "copilot"
+    },
+    {
+      "constant": "ToolsetMetadataCopilotIssueIntents",
+      "id": "copilot_issue_intents",
+      "description": "Opt-in Copilot issue assignment tools that carry intent metadata (rationale, confidence, suggestion)",
+      "default": false,
+      "icon": "copilot"
+    },
+    {
+      "constant": "ToolsetMetadataCopilotSpaces",
+      "id": "copilot_spaces",
+      "description": "Copilot Spaces tools",
+      "default": false,
+      "icon": "copilot"
+    },
+    {
+      "constant": "ToolsetMetadataSupportSearch",
+      "id": "github_support_docs_search",
+      "description": "Retrieve documentation to answer GitHub product and support questions. Topics include: GitHub Actions Workflows, Authentication, ...",
+      "default": false,
+      "icon": "book"
+    }
+  ]
+}
