@@ -34,6 +34,7 @@ import {
   seg,
   toPositiveInt,
 } from '../util.js';
+import { GitHubApiError } from '../client.js';
 
 /* ------------------------------------------------------------------ *
  * Shared helpers
@@ -2055,6 +2056,33 @@ async function buildUpdateProjectItem(ctx, owner, ownerType, projectNumber, inpu
   return { payload: { fields: [{ id: fieldID, value: valueField }] } };
 }
 
+/**
+ * GraphQL call that also sends the `GraphQL-Features` header.
+ *
+ * `client.graphql()` forwards only `signal`/`strict` and hard-codes its own
+ * headers, so a feature-gated mutation has to go through `client.request`
+ * directly. This mirrors `ghcontext.WithGraphQLFeatures` upstream.
+ */
+async function graphqlWithFeatures(ctx, query, variables, features) {
+  const { json } = await ctx.client.request('POST', ctx.client.graphqlUrl, {
+    absolute: true,
+    body: { query, variables },
+    signal: ctx.signal,
+    headers: { 'content-type': 'application/json', 'GraphQL-Features': features.join(',') },
+  });
+  if (json && Array.isArray(json.errors) && json.errors.length > 0) {
+    const error = new GitHubApiError(json.errors.map((entry) => entry.message).join('; '), {
+      method: 'POST',
+      url: ctx.client.graphqlUrl,
+      body: json,
+      errors: json.errors,
+    });
+    error.data = json.data ?? null;
+    if (json.data == null) throw error;
+  }
+  return json?.data ?? null;
+}
+
 /** `SetIssueFieldValues` (issues_granular.go:934). */
 async function setIssueFieldValues(ctx, issueID, issueFields) {
   const mutation = `mutation($input: SetIssueFieldValueInput!) {
@@ -2062,10 +2090,12 @@ async function setIssueFieldValues(ctx, issueID, issueFields) {
 }`;
   let data;
   try {
-    data = await ctx.client.graphql(
+    // Gated behind the `update_issue_suggestions` feature flag (projects.go:1484).
+    data = await graphqlWithFeatures(
+      ctx,
       mutation,
       { input: { issueId: issueID, issueFields } },
-      { signal: ctx.signal },
+      ['update_issue_suggestions'],
     );
   } catch (error) {
     fail(`failed to set issue field value: ${describe(error)}`);
