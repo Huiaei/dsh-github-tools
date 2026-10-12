@@ -1,5 +1,27 @@
 # Changelog
 
+## 1.2.0 — unreleased
+
+Rebuilds the configuration page on the platform's own form primitives, and adds a
+Settings-page entry.
+
+- **The page is now the shipped settings form.** `SettingsFormModel` stages the drafts,
+  `SettingsForm` draws the frame and its single Save, `SettingsValueField` draws the
+  text/number/list controls and `SettingsSecretField` the write-only token. That brings
+  the standard look, the Overridden badge with Reset to default, per-field validation,
+  and the revision-fenced save that keeps a refused draft.
+- **The copy is localized again.** The browser half declared only `slots`, so
+  `ctx.locale` was never injected, the dictionaries never registered, and every label
+  fell back to its key — which read as English-only. It now injects
+  `slots`, `locale` and `configForms`, registers `zh`/`en` and binds `t` through the
+  slot's `locale`.
+- **A second surface:** the same form is registered as a tab in Settings -> Plugins
+  (`settings.plugins.tab`) for readers who look for plugin settings there.
+- Fields are grouped into Connection / Toolsets / Advanced; booleans use the platform's
+  `Switch` instead of a text box.
+- `dsh.client.inject` declares `@deepseek-ai/dsh-client-ui-primitives`; packaging tests
+  assert the primitives require, the form primitives and both slot registrations.
+
 ## 1.1.2 — unreleased
 
 Makes the configuration page actually load, and makes its edits apply live.

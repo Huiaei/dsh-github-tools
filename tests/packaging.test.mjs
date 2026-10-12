@@ -71,6 +71,9 @@ test('the patch row addresses the package by its bare name', () => {
 test('the browser half is declared and follows the shipped bundle format', () => {
   assert.equal(manifest.exports['./client'], './client/index.js');
   assert.equal(manifest.dsh.client?.platform, 'web');
+  // The one package the browser half `require()`s must be declared, so the client
+  // module system loads it before this bundle's half runs.
+  assert.deepEqual(manifest.dsh.client?.inject, ['@deepseek-ai/dsh-client-ui-primitives']);
   const source = readFileSync(join(ROOT, manifest.exports['./client']), 'utf8');
   // The page loads it as a script: no ESM syntax, one ModuleLoader wrapper.
   assert.doesNotMatch(source, /^\s*(import|export)\s/m, 'the browser half must not use ESM syntax');
@@ -78,11 +81,18 @@ test('the browser half is declared and follows the shipped bundle format', () =>
   assert.match(source, new RegExp(`id: '${manifest.name}'`));
   assert.match(source, /exports\.apply = apply/);
   assert.match(source, /require\('react'\)/);
+  assert.match(source, /require\('@deepseek-ai\/dsh-client-ui-primitives'\)/);
+  // The form is the platform's own, not a hand-rolled one.
+  assert.match(source, /primitives\.SettingsFormModel/);
+  assert.match(source, /primitives\.SettingsForm\b/);
   const row = yaml.load(readFileSync(join(ROOT, manifest.dsh.bundle.patch), 'utf8')).find((operation) => operation?.insert).insert[0];
   // The `plugins.row.config` key is `<package name>#<row id>` (ui-plugin-manager's
   // rowConfigKey), and the configForms scope is addressed by the Loader row id.
   assert.match(source, new RegExp(`SLOT_KEY = '${manifest.name}#${row.id}'`));
   assert.match(source, new RegExp(`CONFIG_ROW_ID = '${row.id}'`));
+  // Both surfaces register: the row page and the Settings -> Plugins tab.
+  assert.match(source, /'plugins\.row\.config'/);
+  assert.match(source, /'settings\.plugins\.tab'/);
 });
 
 test('the plugin config keys match the declared Config schema', () => {
