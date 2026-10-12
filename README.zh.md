@@ -1,5 +1,25 @@
 # dsh-github-tools
 
+> [!WARNING]
+> **你的 GitHub token 是明文保存的。**
+> 本插件没有加密、没有 keyring、没有密钥管理。你在配置页里填入的 token 会以普通 YAML 字符串写进
+> `$DSH_HOME/profiles/<profile>/cordis.patch.yml` —— 任何以你的用户身份运行的进程都能读，**该 profile 里
+> 任何 agent 会话也能读**，并且会随 DSH 的配置备份与同步一起被带走。请把它当成磁盘上的一个文件来对待：
+> 用短期、最小权限的 token，或者干脆别把 token 放进文件里 —— 见 [Token 与密钥存储](#token-与密钥存储)。
+
+> [!CAUTION]
+> **本仓库由 AI 编写，不是人写的。**
+> 移植代码、schema、测试、文档 —— 每一行都由 AI agent 依据上游
+> [github/github-mcp-server](https://github.com/github/github-mcp-server) 的源码生成，没有任何人类维护者
+> 审阅过。它与 GitHub、微软、DeepSeek 均无隶属或背书关系。其中多个工具会对你的账号执行**不可逆的破坏性
+> 操作**：`delete_repository`、`merge_pull_request`、`push_files`、`delete_file`、`update_issue_state` 等。
+> 它没有经过任何安全审计。
+
+> [!IMPORTANT]
+> **使用风险完全自负。**
+> 不提供任何形式的担保 —— 见 [LICENSE](LICENSE)。这些工具对你的仓库做了什么、你交给了它们什么凭据、
+> 你让模型看到了哪些数据，都由你自己负责。如果不能接受，请不要安装。
+
 把 [github-mcp-server](https://github.com/github/github-mcp-server) 的**全部 131 个工具**重写为
 **DeepSeek Harness（Cordis）原生工具**。
 
@@ -26,12 +46,18 @@ GitHub REST / GraphQL  ←  src/client.js  ←  src/handlers/*.js  ←  ctx.tool
 
 ## 安装
 
-```bash
-# 本地目录
-dsh plugin add /path/to/dsh-github-tools
+安装是 **profile 级**操作，装完需要重启 DSH 才能激活。
 
-# 或通过 plugin_manager：list_bundles → install_bundle
+```bash
+# 1) 通过插件管理器（推荐）：GUI 里操作，或调用 plugin_manager 工具
+plugin_manager({ action: "install_bundle", target: "<.tgz 路径，或 npm spec>" })
+
+# 2) 手工：把包装进 profile，再把包名加进该 profile package.json 的 dsh.profile.bundles
+cd "$DSH_HOME/profiles/<profile>" && pnpm add /path/to/dsh-github-tools-1.3.0.tgz
 ```
+
+两处改动都需要：依赖把代码放上磁盘，`bundles` 条目才会激活它的补丁。指向源码检出目录同理（`file:…`
+或直接 `pnpm add <目录>`），本包没有构建步骤，检出即可运行。
 
 bundle 补丁（`cordis.patch.yml`）只插入一行进程级插件，所有 agent preset 都能直接用这些工具。若要在某个
 组合里排除，请在更后面的补丁层里按 id 覆盖该行（`- id: github-tools` 加 `disabled: true`），不要重复插入。
@@ -39,7 +65,7 @@ bundle 补丁（`cordis.patch.yml`）只插入一行进程级插件，所有 age
 ### Token
 
 设置 `GITHUB_PERSONAL_ACCESS_TOKEN`（依次还会尝试 `GITHUB_TOKEN`、`GH_TOKEN`），或把 token 写进插件行的
-`config.token`。没有 token 时插件依然注册成功，但每次调用都会返回 HTTP 401。
+`config.token`。没有 token 时插件依然注册成功，但每次调用都会返回 HTTP 401。**注意 token 是明文落盘的**，详见上文。
 
 ## 配置
 
@@ -161,6 +187,65 @@ GITHUB_TOKEN=… node scripts/smoke.mjs   # 只读工具的在线冒烟测试
 | 项目条目标题由手写清洗器剥离 HTML，而非 HTML 分词器 | `governance.js`（`sanitizePlainText`） | 移植上游 `sanitize.PlainText`（去代码围栏信息串 + 剥标签 + 中性化尖括号）且不引新依赖；不像上游分词器那样解码 HTML 实体 |
 
 未列出的部分均为对上游 Go handler 的忠实移植。
+
+## Token 与密钥存储
+
+**在把 token 填进任何地方之前请先读这一节。**
+
+本插件不加密，harness 的插件配置层也不加密。`token` 字段就是一个普通 YAML 文件里的普通字符串：
+
+```
+$DSH_HOME/profiles/<profile>/cordis.patch.yml
+  - id: github-tools
+    config:
+      token: ghp_xxxxxxxxxxxxxxxxxxxx        # ← 明文，就在这儿
+```
+
+这意味着：
+
+- **能读这个文件的人就有你的 token。** Windows 上真正的保护是你用户目录的 ACL，而不是文件权限位
+  （WSL 视角下 `/mnt/c` 恒为 `777`）。
+- **该 profile 里的任何 agent 会话都能读到它。** agent 干活用的 shell / 文件工具同样能读 profile 补丁文档，
+  被提示注入的 agent 不需要任何漏洞就能把它外传。
+- **它会跟着走。** DSH 的配置备份与同步会带上 profile 文档，token 就跟着备份去了别处。
+- **`redactSecrets` 帮不上忙。** harness 只在配置值**跨线边界**时剥离 `role('secret')` 字段，并回一个
+  `{path, set}` 边车，好让远端界面渲染只写输入框而不收到值。那是传输边界控制，不是磁盘加密；没有任何东西
+  对文件做脱敏。
+
+### 该怎么办
+
+三条路，前两条才是关键：
+
+1. **用细粒度 token + 短过期。** 只授权你真正需要的仓库和权限，并设置过期（30–90 天）。细粒度 token 泄露
+   是有边界的；带 `repo` + `workflow` 的 classic `ghp_` 泄露则不是。细粒度创建入口：
+   <https://github.com/settings/personal-access-tokens/new>。配置页里给的链接预填的是 classic 表单和本插件
+   用到的 scope —— 那是方便的选择，不是最安全的选择。
+2. **别把 token 放进文件。** 让 `token` 留空，改用环境变量。解析顺序是 `config.token` → `config.tokenEnv`
+   （默认 `GITHUB_PERSONAL_ACCESS_TOKEN`）→ `GITHUB_TOKEN` → `GH_TOKEN`，所以留空是完全受支持的配置。
+   DSH 启动时会把 `$DSH_HOME/.env` 读进进程环境（`process.loadEnvFile`）：
+
+   ```bash
+   # $DSH_HOME/.env —— 已被 gitignore，且不属于 profile 的配置文档
+   GITHUB_PERSONAL_ACCESS_TOKEN=github_pat_…
+   ```
+
+   这买到的是**分离**而不是加密：`.env` 本身也是明文。它避免的是 token 随每次配置备份、同步和 profile
+   快照到处跑。
+3. **或者用 loader 表达式让文件里没有字面量。** loader 接受配置值里的表达式，所以这样写是合法的：
+
+   ```yaml
+   - id: github-tools
+     config:
+       token: !!js process.env.GITHUB_PERSONAL_ACCESS_TOKEN
+   ```
+
+   代价：配置表单写入的是普通值，之后别再在 token 字段上点保存，否则表达式会被压回字面量。
+
+### 插件做了什么
+
+- GUI 里的 token 字段是**只写**控件：已存的 token 永不回显，空草稿不写入，所以保存其他字段不会清掉它。
+- token 只发往你配置的 GitHub 主机，走 HTTPS 的 `Authorization` 头。不记日志，不收集遥测。
+- 插件不预检 token scope，由 GitHub 返回 403/404。
 
 ## 许可
 

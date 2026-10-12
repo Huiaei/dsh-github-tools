@@ -13,6 +13,12 @@ Adds a Settings-panel entry and a one-click credential link.
   GitHub's classic-token form with the scopes this tool set uses and a recognisable
   description pre-filled, so the credential is one click away.
 - Packaging tests assert the section registration and the token URL.
+- **A README that leads with the risk.** Both READMEs now open with three alerts: the token is
+  stored in plaintext, the repository was written by an AI, and use is entirely at your own
+  risk. A new "Token and secret storage" section documents exactly where the token lands,
+  who can read it, why `redactSecrets` does not help, and the three ways to keep it out of
+  the file. Install instructions were corrected to the profile-level flow that actually
+  works (dependency + `dsh.profile.bundles` + restart).
 
 ## 1.2.0 — unreleased
 
