@@ -1,5 +1,70 @@
+# ---------------------------------------------------------------------------
+# Secrets — a token must never be committed. The plugin reads its token from the
+# DSH profile config or from the environment; nothing here needs a real value.
+# ---------------------------------------------------------------------------
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+*.p12
+*.keystore
+.npmrc
+
+# ---------------------------------------------------------------------------
+# Dependencies
+# ---------------------------------------------------------------------------
 node_modules/
+.pnpm-store/
+jspm_packages/
+
+# ---------------------------------------------------------------------------
+# Package artifacts — `npm pack` / `pnpm pack` tarballs and their unpacked form
+# ---------------------------------------------------------------------------
 *.tgz
-*.log
-.DS_Store
+*.tar.gz
+*.zip
+package/
+
+# ---------------------------------------------------------------------------
+# Build output, caches and coverage
+# ---------------------------------------------------------------------------
+dist/
+build/
+out/
 coverage/
+.nyc_output/
+*.tsbuildinfo
+.cache/
+.tmp/
+tmp/
+
+# ---------------------------------------------------------------------------
+# Logs
+# ---------------------------------------------------------------------------
+*.log
+npm-debug.log*
+pnpm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# ---------------------------------------------------------------------------
+# Editors and operating systems
+# ---------------------------------------------------------------------------
+.DS_Store
+.AppleDouble
+.LSOverride
+Thumbs.db
+desktop.ini
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+
+# ---------------------------------------------------------------------------
+# DSH runtime state, if a profile is ever pointed at this directory
+# ---------------------------------------------------------------------------
+sessions/
+*.session.jsonl
+*.session.jsonl.zstd

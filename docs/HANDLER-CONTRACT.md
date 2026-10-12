@@ -121,7 +121,7 @@ issueDatabaseId(client, owner, repo, number, signal)   // → { databaseId, issu
 Your tool names and the upstream files that declare them:
 
 ```bash
-cd /workspace/dsh-github-tools
+cd dsh-github-tools   # the repository root
 node -e 'const a=require("./scripts/assignment.json");console.log(a["<file>.js"].join("\n"))'
 ```
 
@@ -135,7 +135,9 @@ const d=t.find(x=>x.name==="<tool_name>");
 console.log(JSON.stringify({inputSchema:d.inputSchema,outputSchema:d.outputSchema,annotations:d.annotations,sourceFile:d.sourceFile,sourceFunc:d.sourceFunc},null,2));'
 ```
 
-The **upstream Go implementation** is a shallow clone at `/tmp/gh-mcp`:
+The **upstream Go implementation** is a shallow clone of
+[github/github-mcp-server](https://github.com/github/github-mcp-server) (this port kept its
+clone at `/tmp/gh-mcp`; clone it anywhere):
 
 - `pkg/github/<sourceFile>` holds the handler (`sourceFunc` names it) and its
   `NewToolWithSchemaOptions[In, Out](…)` declaration with the `In`/`Out` structs.
@@ -168,7 +170,7 @@ Use `grep`/`read` on `/tmp/gh-mcp` — do not re-clone, do not fetch the web.
 ## 7. Acceptance criteria for your file
 
 ```bash
-cd /workspace/dsh-github-tools
+cd dsh-github-tools   # the repository root
 node --check src/handlers/<file>.js
 node -e '
 import("./src/handlers/<file>.js").then(async (m)=>{
