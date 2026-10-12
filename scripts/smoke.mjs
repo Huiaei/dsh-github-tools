@@ -13,7 +13,7 @@
  */
 
 import { definitions } from '../src/generated/data.js';
-import plugin from '../src/index.js';
+import * as plugin from '../src/index.js';
 
 const token = process.env.GITHUB_TOKEN || process.env.GITHUB_PERSONAL_ACCESS_TOKEN || process.env.GH_TOKEN || '';
 const TIMEOUT_MS = 30_000;
@@ -45,7 +45,7 @@ const ctx = {
 };
 
 console.log(`\ndsh-github-tools — live smoke test${token ? ' (authenticated)' : ' (anonymous)'}\n`);
-plugin(ctx, { token, toolsets: ['all'], readOnly: true, timeoutMs: TIMEOUT_MS });
+plugin.apply(ctx, { token, toolsets: ['all'], readOnly: true, timeoutMs: TIMEOUT_MS });
 
 console.log(`registered ${registered.size} read-only tools of ${definitions.length}\n`);
 

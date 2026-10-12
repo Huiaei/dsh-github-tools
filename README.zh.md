@@ -63,6 +63,22 @@ bundle 补丁（`cordis.patch.yml`）只插入一行进程级插件，所有 age
 默认集合（上游 `default: true` 的 toolset）为 `context`、`repos`、`issues`、`pull_requests`、`users`、
 `copilot`，共 86 个工具；`toolsets: ['all']` 注册全部 131 个。
 
+### 设置放在哪里
+
+本包带一个浏览器半（`client/index.js`），所以配置可以直接在界面里改：
+**设置 → 插件 → `dsh-github-tools` 这一行 → 配置**。页面通过宿主的 `configForms` 服务读写，
+按 Loader 行 id `github-tools` 寻址。
+
+没有界面时，同样的值就在本包的 `cordis.patch.yml` 那一行里，或写在 profile 的
+`cordis.patch.yml` 中按 id 覆盖：
+
+```yaml
+- id: github-tools
+  config:
+    token: ghp_…
+    toolsets: [all]
+```
+
 ## 工具分布
 
 | toolset | 数量 | 默认 | 说明 |

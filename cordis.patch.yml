@@ -8,15 +8,16 @@
 #
 # Installing this bundle changes nothing else: no other plugin is touched.
 #
-# The entry name is PATH-RELATIVE on purpose. DSH anchors a relative `name:` to
-# the directory of the patch file that declared it, so this row always loads this
-# bundle's own `src/index.js` — whatever the package folder happens to be called.
-# A bare package name would instead have to match the installed folder name,
-# which couples this file to the npm package name.
+# The entry name is the BARE PACKAGE NAME on purpose, not a relative path.
+# `dsh-client-modules` attaches a package's browser half to the Loader row whose
+# specifier is the bare package name, so the row configuration page registered by
+# `client/index.js` (slot `plugins.row.config`, key `dsh-github-tools#github-tools`)
+# only exists while this row is addressed this way. pnpm installs the package under
+# its own name, so `dsh-github-tools` always resolves to this bundle's entry.
 
 - insert:
     - id: github-tools
-      name: './src/index.js'
+      name: 'dsh-github-tools'
       config:
         # The token is read from GITHUB_PERSONAL_ACCESS_TOKEN (then GITHUB_TOKEN,
         # then GH_TOKEN) when this is left empty. Prefer the environment variable

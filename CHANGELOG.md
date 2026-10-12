@@ -1,5 +1,37 @@
 # Changelog
 
+## 1.1.1 — unreleased
+
+Adds the row configuration page, so the plugin's settings are editable from the GUI.
+
+- New browser half (`client/index.js`, exported as `./client` and declared by `dsh.client`):
+  a plain hand-written bundle with no build step, registering the row configuration page
+  under the `plugins.row.config` slot with the key `dsh-github-tools#github-tools`. It edits
+  `token`, `toolsets`, `readOnly`, `deferLoading` and the advanced connection settings
+  through the client `configForms` service, addressed by the Loader row id.
+- `cordis.patch.yml` now names the package (`dsh-github-tools`) instead of the relative
+  `./src/index.js`: `dsh-client-modules` attaches a package's browser half to the row whose
+  specifier is the bare package name, so the relative form left the page unregistered even
+  though the Host half loaded.
+- Packaging tests assert the browser-half manifest, the ModuleLoader bundle format, the
+  `plugins.row.config` key and the bare-name row.
+
+## 1.0.1 — unreleased
+
+Fixes the plugin's settings/config projection and makes every Config field optional.
+
+- **Removed the `export default apply`.** The Cordis loader's `unwrapExports()` replaces the
+  plugin object with a module's `default` export, so the exported function became the plugin
+  and `Config` disappeared; the harness reported the row as `status: "absent"` and never
+  projected a settings schema. The module is now a pure named-export namespace
+  (`apply`/`inject`/`name`/`Config`), matching `dsh-wsl-tool`.
+- **Every Config field now has a default** (`token: ''`, `apiBaseUrl`/`graphqlUrl: ''`,
+  `toolsets: ['default']`, `tools`/`excludeTools: []`, `userAgent: 'dsh-github-tools'`), so the
+  shipped `cordis.patch.yml` row — which only sets `token`, `toolsets` and `readOnly` — passes
+  schema validation instead of failing activation.
+- `scripts/smoke.mjs` uses a namespace import; two regression tests assert the module has no
+  default export and that the shipped config row validates.
+
 ## 1.0.0 — unreleased
 
 First release: the github-mcp-server tool set as native DeepSeek Harness tools.

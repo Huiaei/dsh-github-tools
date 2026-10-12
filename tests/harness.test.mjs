@@ -28,7 +28,10 @@ let plugin = null;
 let pluginModule = null;
 try {
   pluginModule = await import('../src/index.js');
-  plugin = typeof pluginModule.default === 'function' ? pluginModule.default : null;
+  // The module must be a plain namespace carrying `apply`/`Config`/`inject`: the loader's
+  // `unwrapExports()` collapses a `default` export to that value, which would hide `Config`
+  // from the harness (and leave the plugin with no settings schema).
+  plugin = typeof pluginModule.apply === 'function' && pluginModule.default === undefined ? pluginModule.apply : null;
 } catch {
   plugin = null;
   pluginModule = null;
@@ -134,6 +137,30 @@ test('the plugin Config applies its defaults', { skip: pluginModule === null }, 
   assert.equal(resolved.timeoutMs, 60_000);
   assert.equal(resolved.readOnly, false);
   assert.equal(resolved.maxItems, 1_000);
+});
+
+test('the plugin module stays a namespace so the harness can project Config', { skip: pluginModule === null }, () => {
+  // A `default` export makes the loader's unwrapExports() replace the plugin object with that
+  // value, which hides `Config` and leaves the row with status "absent" (no settings schema).
+  assert.equal(pluginModule.default, undefined, 'the module must not have a default export');
+  assert.equal(typeof pluginModule.apply, 'function');
+  assert.notEqual(pluginModule.Config, undefined);
+  assert.deepEqual(pluginModule.inject, ['tools']);
+});
+
+test('the shipped config row satisfies the plugin Config schema', { skip: pluginModule === null }, () => {
+  // Mirrors the `config:` block of cordis.patch.yml: every other field must have a default,
+  // otherwise the loader rejects the row and the plugin never activates.
+  const resolved = pluginModule.Config({ token: '', toolsets: ['default'], readOnly: false });
+  assert.deepEqual(resolved.toolsets, ['default']);
+  assert.deepEqual(resolved.tools, []);
+  assert.deepEqual(resolved.excludeTools, []);
+  assert.equal(resolved.apiBaseUrl, '');
+  assert.equal(resolved.graphqlUrl, '');
+  assert.equal(resolved.userAgent, 'dsh-github-tools');
+  assert.equal(resolved.tokenEnv, 'GITHUB_PERSONAL_ACCESS_TOKEN');
+  assert.equal(resolved.deferLoading, false);
+  assert.equal(resolved.retries, 2);
 });
 
 test('the author spec validator agrees with the real compiler', { skip: !available }, () => {

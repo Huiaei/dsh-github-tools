@@ -59,13 +59,30 @@ test('the Cordis patch parses and inserts exactly one row', () => {
   assert.deepEqual(Object.keys(row.config).sort(), ['readOnly', 'token', 'toolsets']);
 });
 
-test('the patch row points at a file that exists next to the patch', () => {
-  const patchPath = join(ROOT, manifest.dsh.bundle.patch);
-  const patch = yaml.load(readFileSync(patchPath, 'utf8'));
+test('the patch row addresses the package by its bare name', () => {
+  const patch = yaml.load(readFileSync(join(ROOT, manifest.dsh.bundle.patch), 'utf8'));
   const row = patch.find((operation) => operation?.insert).insert[0];
-  // A relative `name` is anchored by the harness to the patch file's directory.
-  assert.ok(row.name.startsWith('./'), 'the entry name should be path-relative');
-  assert.ok(existsSync(join(dirname(patchPath), row.name)), `${row.name} does not resolve next to the patch`);
+  // `dsh-client-modules` attaches a package's browser half to the Loader row whose
+  // specifier is the bare package name; a relative path would leave the row
+  // configuration page unregistered even though the Host half still loads.
+  assert.equal(row.name, manifest.name, 'the row must name the package, not a path');
+});
+
+test('the browser half is declared and follows the shipped bundle format', () => {
+  assert.equal(manifest.exports['./client'], './client/index.js');
+  assert.equal(manifest.dsh.client?.platform, 'web');
+  const source = readFileSync(join(ROOT, manifest.exports['./client']), 'utf8');
+  // The page loads it as a script: no ESM syntax, one ModuleLoader wrapper.
+  assert.doesNotMatch(source, /^\s*(import|export)\s/m, 'the browser half must not use ESM syntax');
+  assert.match(source, /window\.__ModuleLoader__\.load\(\{/);
+  assert.match(source, new RegExp(`id: '${manifest.name}'`));
+  assert.match(source, /exports\.apply = apply/);
+  assert.match(source, /require\('react'\)/);
+  const row = yaml.load(readFileSync(join(ROOT, manifest.dsh.bundle.patch), 'utf8')).find((operation) => operation?.insert).insert[0];
+  // The `plugins.row.config` key is `<package name>#<row id>` (ui-plugin-manager's
+  // rowConfigKey), and the configForms scope is addressed by the Loader row id.
+  assert.match(source, new RegExp(`SLOT_KEY = '${manifest.name}#${row.id}'`));
+  assert.match(source, new RegExp(`CONFIG_ROW_ID = '${row.id}'`));
 });
 
 test('the plugin config keys match the declared Config schema', () => {

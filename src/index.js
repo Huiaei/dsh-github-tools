@@ -31,21 +31,21 @@ export const inject = ['tools'];
 /** Plugin configuration. */
 export const Config = z.object({
   /** GitHub personal access token (or GitHub App installation token). */
-  token: z.string(),
+  token: z.string().default(''),
   /** Environment variable consulted when `token` is not set. */
   tokenEnv: z.string().default('GITHUB_PERSONAL_ACCESS_TOKEN'),
   /** `github.com`, or the hostname of a GitHub Enterprise Server instance. */
   host: z.string().default('github.com'),
   /** Override the REST base URL (defaults to the value derived from `host`). */
-  apiBaseUrl: z.string(),
+  apiBaseUrl: z.string().default(''),
   /** Override the GraphQL endpoint (defaults to the value derived from `host`). */
-  graphqlUrl: z.string(),
-  /** Toolsets to enable; omitted means the upstream default set, `['all']` means everything. */
-  toolsets: z.array(z.string()),
+  graphqlUrl: z.string().default(''),
+  /** Toolsets to enable; `[]`/omitted means the upstream default set, `['all']` means everything. */
+  toolsets: z.array(z.string()).default(['default']),
   /** Explicit tool names; when non-empty this replaces `toolsets` entirely. */
-  tools: z.array(z.string()),
+  tools: z.array(z.string()).default([]),
   /** Tool names to remove from the selection. */
-  excludeTools: z.array(z.string()),
+  excludeTools: z.array(z.string()).default([]),
   /** Register only the tools the upstream server marks read-only. */
   readOnly: z.boolean().default(false),
   /** Ask the harness to defer loading the definitions until first use. */
@@ -55,7 +55,7 @@ export const Config = z.object({
   /** Retries for 429/5xx responses. */
   retries: z.number().default(2),
   /** User-Agent header sent to GitHub. */
-  userAgent: z.string(),
+  userAgent: z.string().default('dsh-github-tools'),
   /** Upper bound on items collected by a single paginated call. */
   maxItems: z.number().default(1_000),
 });
@@ -210,4 +210,14 @@ export function apply(ctx, config) {
   );
 }
 
-export default apply;
+/*
+ * NOTE: deliberately NO `export default`.
+ *
+ * The Cordis loader resolves a plugin with
+ *   unwrapExports(exports) { exports = exports.default ?? exports; if (!exports.__esModule) return exports; ... }
+ * so a `default` export replaces the whole module with that value. Exporting `apply` as
+ * default makes the plugin object the bare function, `plugin.Config` becomes undefined, and
+ * the harness reports the row as `status: "absent"` — the plugin then has no settings schema
+ * and no config form in the UI. Exporting only named bindings keeps the module namespace as
+ * the plugin object, where `apply`, `inject`, `name` and `Config` are all visible.
+ */

@@ -67,6 +67,22 @@ fails with HTTP 401.
 The default set (the upstream `default: true` toolsets) is `context`, `repos`, `issues`,
 `pull_requests`, `users`, `copilot` — 86 tools. `toolsets: ['all']` registers all 131.
 
+### Where the settings live
+
+The bundle ships a browser half, so its configuration is editable in the GUI:
+**Settings → Plugins → the `dsh-github-tools` row → Configure**. The page writes through the
+harness's `configForms` service, addressed by the Loader row id `github-tools`.
+
+Without the GUI the same values live in this bundle's `cordis.patch.yml` row, or in the
+profile's `cordis.patch.yml` as an override by id:
+
+```yaml
+- id: github-tools
+  config:
+    token: ghp_…
+    toolsets: [all]
+```
+
 ## Tools
 
 | toolset | tools | default | upstream description |
