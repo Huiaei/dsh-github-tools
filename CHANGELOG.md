@@ -1,5 +1,25 @@
 # Changelog
 
+## 1.1.2 — unreleased
+
+Makes the configuration page actually load, and makes its edits apply live.
+
+- **Every Config field is `.volatile()`.** DSH's settings service projects a plugin's
+  config into an editable form only through `volatileForm()`, which keeps a field only
+  when its nearest ancestor is volatile, and `SettingsForms.describe()` skips an entry
+  whose schema has none. Without a volatile field the namespace is never served, so
+  `configForms.whileServed()` never fired and the page stayed on "loading" forever.
+- **Volatile fields resolve to live cells, not values.** schemastery wraps them with
+  cosmokit's `createVolatile(default)`, so the plugin now reads every field through
+  `unbox()`/`readConfig()` at call time. The settings service writes the cell in place,
+  which is how an edit reaches a running plugin without a remount.
+- **A volatile edit re-syncs the tool set.** `apply()` keeps `name -> disposer` for the
+  tools it mounted and diffs it on `loader/volatile-update`, so changing `toolsets`,
+  `tools`, `excludeTools` or `readOnly` adds and removes tools live instead of waiting
+  for a restart.
+- Tests: a live-edit test drives `loader/volatile-update` through default → all → default
+  and asserts the mounted set follows; another asserts no Config field lacks volatility.
+
 ## 1.1.1 — unreleased
 
 Adds the row configuration page, so the plugin's settings are editable from the GUI.

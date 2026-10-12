@@ -130,13 +130,34 @@ test('apply() honours readOnly and toolset selection', { skip: !available || plu
   assert.ok(expected > 0 && expected < definitions.length);
 });
 
+/**
+ * A `.volatile()` schema field does not resolve to its value: schemastery wraps it in
+ * cosmokit's `createVolatile(default)`, and the plugin reads it through `.get()`.
+ * Plain values pass through untouched.
+ */
+const unbox = (value) => (value !== null && typeof value === 'object' && typeof value.get === 'function' ? value.get() : value);
+
 test('the plugin Config applies its defaults', { skip: pluginModule === null }, () => {
   const resolved = pluginModule.Config({ token: 'abc' });
-  assert.equal(resolved.token, 'abc');
-  assert.equal(resolved.host, 'github.com');
-  assert.equal(resolved.timeoutMs, 60_000);
-  assert.equal(resolved.readOnly, false);
-  assert.equal(resolved.maxItems, 1_000);
+  assert.equal(unbox(resolved.token), 'abc');
+  assert.equal(unbox(resolved.host), 'github.com');
+  assert.equal(unbox(resolved.timeoutMs), 60_000);
+  assert.equal(unbox(resolved.readOnly), false);
+  assert.equal(unbox(resolved.maxItems), 1_000);
+});
+
+test('every Config field is volatile so the settings namespace is served', { skip: pluginModule === null }, () => {
+  // DSH's settings service projects a plugin's config into an editable form only
+  // through `volatileForm()`, which keeps a field only when its nearest ancestor is
+  // volatile. Without one the entry is never served, `whileServed()` never fires and
+  // the configuration page waits forever — so this is a hard requirement, not styling.
+  const resolved = pluginModule.Config({});
+  const plain = [];
+  for (const key of Object.keys(resolved)) {
+    const value = resolved[key];
+    if (value === null || typeof value !== 'object' || typeof value.get !== 'function') plain.push(key);
+  }
+  assert.deepEqual(plain, [], 'these Config fields are not volatile');
 });
 
 test('the plugin module stays a namespace so the harness can project Config', { skip: pluginModule === null }, () => {
@@ -152,15 +173,55 @@ test('the shipped config row satisfies the plugin Config schema', { skip: plugin
   // Mirrors the `config:` block of cordis.patch.yml: every other field must have a default,
   // otherwise the loader rejects the row and the plugin never activates.
   const resolved = pluginModule.Config({ token: '', toolsets: ['default'], readOnly: false });
-  assert.deepEqual(resolved.toolsets, ['default']);
-  assert.deepEqual(resolved.tools, []);
-  assert.deepEqual(resolved.excludeTools, []);
-  assert.equal(resolved.apiBaseUrl, '');
-  assert.equal(resolved.graphqlUrl, '');
-  assert.equal(resolved.userAgent, 'dsh-github-tools');
-  assert.equal(resolved.tokenEnv, 'GITHUB_PERSONAL_ACCESS_TOKEN');
-  assert.equal(resolved.deferLoading, false);
-  assert.equal(resolved.retries, 2);
+  assert.deepEqual(unbox(resolved.toolsets), ['default']);
+  assert.deepEqual(unbox(resolved.tools), []);
+  assert.deepEqual(unbox(resolved.excludeTools), []);
+  assert.equal(unbox(resolved.apiBaseUrl), '');
+  assert.equal(unbox(resolved.graphqlUrl), '');
+  assert.equal(unbox(resolved.userAgent), 'dsh-github-tools');
+  assert.equal(unbox(resolved.tokenEnv), 'GITHUB_PERSONAL_ACCESS_TOKEN');
+  assert.equal(unbox(resolved.deferLoading), false);
+  assert.equal(unbox(resolved.retries), 2);
+});
+
+test('a volatile settings edit re-syncs the mounted tools', { skip: plugin === null }, () => {
+  // A volatile field is a live cell: the settings service writes it in place and then
+  // announces `loader/volatile-update`, and the plugin must diff its registrations.
+  const registered = new Map();
+  let volatile;
+  const ctx = {
+    get: (name) => (name === 'tools'
+      ? {
+        register: (tool) => {
+          registered.set(tool.name, tool);
+          return () => registered.delete(tool.name);
+        },
+      }
+      : undefined),
+    on: (event, handler) => {
+      if (event === 'loader/volatile-update') volatile = handler;
+    },
+    logger: () => ({ info: () => {}, error: () => {}, debug: () => {} }),
+  };
+  let toolsets = ['default'];
+  plugin(ctx, { token: '', toolsets: { get: () => toolsets }, readOnly: { get: () => false } });
+  const defaults = registered.size;
+  assert.ok(defaults > 0 && defaults < definitions.length, `expected a subset, got ${defaults}`);
+
+  toolsets = ['all'];
+  volatile();
+  assert.equal(registered.size, definitions.length, "'all' must register every tool live");
+
+  toolsets = [];
+  volatile();
+  assert.equal(registered.size, defaults, 'an empty list must fall back to the default toolsets');
+
+  toolsets = ['all'];
+  volatile();
+  const registeredNow = registered.size;
+  ctx.get = () => ({ register: () => () => {} });
+  volatile();
+  assert.equal(registered.size, registeredNow, 're-syncing must not re-register mounted tools');
 });
 
 test('the author spec validator agrees with the real compiler', { skip: !available }, () => {

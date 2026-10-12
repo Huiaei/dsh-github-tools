@@ -44,7 +44,7 @@ window.__ModuleLoader__.load({
 
     const zh = {
       summary: '令牌、toolset 与只读开关',
-      intro: '这些设置写入本插件的配置行；工具集变化需要重启 DSH 才会重新注册工具。',
+      intro: '这些设置写入本插件的配置行，保存后立即生效：工具集会实时重新注册，不需要重启 DSH。',
       token: 'Personal Access Token',
       tokenHint: '留空时依次回退到环境变量 GITHUB_PERSONAL_ACCESS_TOKEN、GITHUB_TOKEN、GH_TOKEN。',
       toolsets: 'Toolset',
@@ -76,7 +76,7 @@ window.__ModuleLoader__.load({
 
     const en = {
       summary: 'Token, toolsets and the read-only switch',
-      intro: 'These settings are written to this plugin’s configuration row; toolset changes need a DSH restart to re-register the tools.',
+      intro: 'These settings are written to this plugin’s configuration row and apply immediately: the tool set is re-registered live, with no DSH restart.',
       token: 'Personal access token',
       tokenHint: 'When empty, GITHUB_PERSONAL_ACCESS_TOKEN, GITHUB_TOKEN and GH_TOKEN are consulted in that order.',
       toolsets: 'Toolsets',

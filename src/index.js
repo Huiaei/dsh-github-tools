@@ -28,47 +28,90 @@ import { selectTools } from './select.js';
 /** Services this plugin registers into. */
 export const inject = ['tools'];
 
-/** Plugin configuration. */
+/**
+ * Plugin configuration.
+ *
+ * EVERY field is `.volatile()`, and that is not decoration: DSH's settings service
+ * projects a plugin's config into an editable form only through `volatileForm()`,
+ * which keeps a field only when its nearest ancestor is marked volatile. A schema
+ * without one is never served as a settings namespace, so `configForms.get()` never
+ * resolves, `whileServed()` never fires and the configuration page waits forever.
+ * A volatile field must not sit inside another volatile one, so every leaf here is
+ * marked directly and no object node is.
+ */
 export const Config = z.object({
   /** GitHub personal access token (or GitHub App installation token). */
-  token: z.string().default(''),
+  token: z.string().default('').volatile(),
   /** Environment variable consulted when `token` is not set. */
-  tokenEnv: z.string().default('GITHUB_PERSONAL_ACCESS_TOKEN'),
+  tokenEnv: z.string().default('GITHUB_PERSONAL_ACCESS_TOKEN').volatile(),
   /** `github.com`, or the hostname of a GitHub Enterprise Server instance. */
-  host: z.string().default('github.com'),
+  host: z.string().default('github.com').volatile(),
   /** Override the REST base URL (defaults to the value derived from `host`). */
-  apiBaseUrl: z.string().default(''),
+  apiBaseUrl: z.string().default('').volatile(),
   /** Override the GraphQL endpoint (defaults to the value derived from `host`). */
-  graphqlUrl: z.string().default(''),
+  graphqlUrl: z.string().default('').volatile(),
   /** Toolsets to enable; `[]`/omitted means the upstream default set, `['all']` means everything. */
-  toolsets: z.array(z.string()).default(['default']),
+  toolsets: z.array(z.string()).default(['default']).volatile(),
   /** Explicit tool names; when non-empty this replaces `toolsets` entirely. */
-  tools: z.array(z.string()).default([]),
+  tools: z.array(z.string()).default([]).volatile(),
   /** Tool names to remove from the selection. */
-  excludeTools: z.array(z.string()).default([]),
+  excludeTools: z.array(z.string()).default([]).volatile(),
   /** Register only the tools the upstream server marks read-only. */
-  readOnly: z.boolean().default(false),
+  readOnly: z.boolean().default(false).volatile(),
   /** Ask the harness to defer loading the definitions until first use. */
-  deferLoading: z.boolean().default(false),
+  deferLoading: z.boolean().default(false).volatile(),
   /** Per-call HTTP timeout in milliseconds. */
-  timeoutMs: z.number().default(60_000),
+  timeoutMs: z.number().default(60_000).volatile(),
   /** Retries for 429/5xx responses. */
-  retries: z.number().default(2),
+  retries: z.number().default(2).volatile(),
   /** User-Agent header sent to GitHub. */
-  userAgent: z.string().default('dsh-github-tools'),
+  userAgent: z.string().default('dsh-github-tools').volatile(),
   /** Upper bound on items collected by a single paginated call. */
-  maxItems: z.number().default(1_000),
+  maxItems: z.number().default(1_000).volatile(),
 });
 
+/** Every configuration key, with the same default the schema declares. */
 const DEFAULTS = {
+  token: '',
   tokenEnv: 'GITHUB_PERSONAL_ACCESS_TOKEN',
   host: 'github.com',
+  apiBaseUrl: '',
+  graphqlUrl: '',
+  toolsets: ['default'],
+  tools: [],
+  excludeTools: [],
   readOnly: false,
   deferLoading: false,
   timeoutMs: 60_000,
   retries: 2,
+  userAgent: 'dsh-github-tools',
   maxItems: 1_000,
 };
+
+/**
+ * Read one configuration value, unwrapping a volatile cell.
+ *
+ * A `.volatile()` schema field does NOT resolve to its value: schemastery wraps it
+ * with cosmokit's `createVolatile(default)`, which is why the shipped plugins read
+ * theirs as `config.timeoutMs.get()`. The cell is written in place when the user
+ * edits the field — that in-place write is what makes an edit apply without
+ * remounting the plugin — so reading through `.get()` is both required for
+ * correctness and how live updates arrive. A plain value (an older host, or a
+ * hand-built settings object in a test) passes through untouched.
+ */
+function unbox(value) {
+  return value !== null && typeof value === 'object' && typeof value.get === 'function' ? value.get() : value;
+}
+
+/** The plugin's configuration as plain values, resolved at call time. */
+function readConfig(raw) {
+  const out = { ...DEFAULTS };
+  for (const key of Object.keys(DEFAULTS)) {
+    const value = unbox(raw?.[key]);
+    if (value !== undefined) out[key] = value;
+  }
+  return out;
+}
 
 /** Environment variables consulted, in order, when no token is configured. */
 const TOKEN_ENV_FALLBACKS = ['GITHUB_PERSONAL_ACCESS_TOKEN', 'GITHUB_TOKEN', 'GH_TOKEN'];
@@ -111,14 +154,14 @@ function makeLogger(ctx) {
  * arrays and plain strings. The rendered text block (not the structured schema) is
  * what the model sees, so a handler may return any JSON value.
  */
-function buildTool(definition, handler, context) {
+function buildTool(definition, handler, state) {
   const readOnly = definition.annotations?.readOnlyHint === true;
   const parameters = toToolParameters(definition.inputSchema);
   const tool = {
     name: definition.name,
     description: definition.description,
     parameters,
-    timeoutMs: context.config.timeoutMs,
+    timeoutMs: readConfig(state.raw).timeoutMs,
     isConcurrencySafe: () => readOnly,
     output: {
       schema: { type: 'json' },
@@ -130,15 +173,18 @@ function buildTool(definition, handler, context) {
         error.name = 'AbortError';
         throw error;
       }
+      // Resolve the configuration per call: a volatile field is a live cell that
+      // the settings service writes in place, so `.get()` here is what makes an
+      // edit apply without remounting the plugin.
       return handler(args ?? {}, {
-        client: context.client,
-        config: context.config,
-        log: context.log,
+        client: state.client,
+        config: readConfig(state.raw),
+        log: state.log,
         signal: exec?.signal,
       });
     },
   };
-  if (context.config.deferLoading === true) tool.deferLoading = true;
+  if (readConfig(state.raw).deferLoading === true) tool.deferLoading = true;
   return defineTool(tool);
 }
 
@@ -156,58 +202,95 @@ export function apply(ctx, config) {
     return;
   }
 
-  const resolved = { ...DEFAULTS, ...(config ?? {}) };
-  const token = resolveToken(resolved, process.env);
-  const client = new GitHubClient({
-    token,
+  // A volatile settings edit is written into the same object the loader handed us
+  // and then announced, so the resolved values are re-read from `state.raw` at call
+  // time (`loader/volatile-update` below re-syncs the tool set). Registering a tool
+  // is likewise a live operation — `register` returns its own disposer — so a
+  // toolset or read-only change is not restart-only.
+  const state = {
+    raw: config ?? {},
+    client: null,
+    log: (message) => log('debug', message),
+  };
+
+  const buildClient = (resolved) => new GitHubClient({
+    token: resolveToken(resolved, process.env),
     host: resolved.host,
     apiBaseUrl: resolved.apiBaseUrl,
     graphqlUrl: resolved.graphqlUrl,
     timeoutMs: resolved.timeoutMs,
     retries: resolved.retries,
     userAgent: resolved.userAgent,
-    log: (message) => log('debug', message),
+    log: state.log,
   });
 
-  const selection = selectTools({ definitions, toolsets, config: resolved });
-  const context = { client, config: resolved, log: (message) => log('debug', message) };
+  /** name -> disposer for the tools this plugin currently has mounted. */
+  const mounted = new Map();
 
-  const skipped = [];
-  const failed = [];
-  let registered = 0;
-  for (const definition of selection.selected) {
-    const handler = handlers[definition.name];
-    if (typeof handler !== 'function') {
-      skipped.push(definition.name);
-      continue;
+  /** Re-resolve the configuration and diff the mounted tools against it. */
+  const sync = () => {
+    const resolved = readConfig(state.raw);
+    state.client = buildClient(resolved);
+    const selection = selectTools({ definitions, toolsets, config: resolved });
+    const wanted = new Set();
+    const skipped = [];
+    for (const definition of selection.selected) {
+      const handler = handlers[definition.name];
+      if (typeof handler !== 'function') {
+        skipped.push(definition.name);
+        continue;
+      }
+      wanted.add(definition.name);
+      if (mounted.has(definition.name)) continue;
+      try {
+        mounted.set(definition.name, tools.register(buildTool(definition, handler, state)));
+      } catch (error) {
+        log('error', `failed to register ${definition.name}: ${error?.message ?? error}`);
+      }
     }
-    try {
-      tools.register(buildTool(definition, handler, context));
-      registered += 1;
-    } catch (error) {
-      failed.push(`${definition.name}: ${error?.message ?? error}`);
+    for (const [name, dispose] of [...mounted]) {
+      if (wanted.has(name)) continue;
+      mounted.delete(name);
+      try {
+        dispose();
+      } catch (error) {
+        log('error', `failed to unregister ${name}: ${error?.message ?? error}`);
+      }
     }
-  }
 
-  for (const entry of duplicateHandlers) {
-    log('error', `duplicate handler for ${entry.name} in ${entry.files.join(', ')}; using ${entry.files[0]}`);
-  }
-  if (selection.unknownToolsets.length > 0) log('error', `unknown toolsets ignored: ${selection.unknownToolsets.join(', ')}`);
-  if (selection.unknownTools.length > 0) log('error', `unknown tools ignored: ${selection.unknownTools.join(', ')}`);
-  if (skipped.length > 0) log('error', `no handler implemented for: ${skipped.join(', ')}`);
-  for (const failure of failed) log('error', `failed to register ${failure}`);
-  if (token === null) {
+    for (const entry of duplicateHandlers) {
+      log('error', `duplicate handler for ${entry.name} in ${entry.files.join(', ')}; using ${entry.files[0]}`);
+    }
+    if (selection.unknownToolsets.length > 0) log('error', `unknown toolsets ignored: ${selection.unknownToolsets.join(', ')}`);
+    if (selection.unknownTools.length > 0) log('error', `unknown tools ignored: ${selection.unknownTools.join(', ')}`);
+    if (skipped.length > 0) log('error', `no handler implemented for: ${skipped.join(', ')}`);
+    if (state.client.authenticated !== true) {
+      log(
+        'error',
+        `no GitHub token configured: set the plugin's token, or export ${resolved.tokenEnv} (also checked: ${TOKEN_ENV_FALLBACKS.join(', ')}). Calls will fail with HTTP 401.`,
+      );
+    }
     log(
-      'error',
-      `no GitHub token configured: set the plugin's token, or export ${resolved.tokenEnv} (also checked: ${TOKEN_ENV_FALLBACKS.join(', ')}). Calls will fail with HTTP 401.`,
+      'info',
+      `registered ${mounted.size}/${selection.selected.length} GitHub tools ` +
+        `(toolsets: ${selection.enabledToolsets.join(', ')}${resolved.readOnly ? '; read-only' : ''})`,
     );
-  }
+  };
 
-  log(
-    'info',
-    `registered ${registered}/${selection.selected.length} GitHub tools ` +
-      `(toolsets: ${selection.enabledToolsets.join(', ')}${resolved.readOnly ? '; read-only' : ''})`,
-  );
+  sync();
+
+  // A volatile edit writes the field's cell in place and then announces it, so the
+  // new value is already visible to `readConfig`; re-syncing is what diffs the
+  // mounted tools against the new toolset / read-only selection.
+  if (typeof ctx.on === 'function') {
+    ctx.on('loader/volatile-update', () => {
+      try {
+        sync();
+      } catch (error) {
+        log('error', `applying a live settings change failed: ${error?.message ?? error}`);
+      }
+    });
+  }
 }
 
 /*

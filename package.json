@@ -1,6 +1,6 @@
 {
   "name": "dsh-github-tools",
-  "version": "1.1.1",
+  "version": "1.1.2",
   "description": "The full github-mcp-server tool set as native DeepSeek Harness tools: 131 GitHub tools (repos, issues, pull requests, actions, code security, discussions, projects, notifications, gists, copilot) registered directly on the host `tools` service — no MCP server, no child process, no transport.",
   "type": "module",
   "main": "src/index.js",
