@@ -1,5 +1,19 @@
 # Changelog
 
+## 1.3.0 — unreleased
+
+Adds a Settings-panel entry and a one-click credential link.
+
+- **A real Settings page.** The browser half registers `settings.section` (id
+  `dsh-github-tools`, order 65), so the plugin appears as its own entry in the Settings
+  panel beside the shipped sections and dsh-market's page. The earlier
+  `settings.plugins.tab` registration only added a tab *inside* Settings -> Built-in
+  plugins, which is not where anyone looks for a plugin's configuration.
+- **Create the token from the field.** The token control's hint now carries a link to
+  GitHub's classic-token form with the scopes this tool set uses and a recognisable
+  description pre-filled, so the credential is one click away.
+- Packaging tests assert the section registration and the token URL.
+
 ## 1.2.0 — unreleased
 
 Rebuilds the configuration page on the platform's own form primitives, and adds a

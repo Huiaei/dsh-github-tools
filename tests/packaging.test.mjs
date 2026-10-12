@@ -93,6 +93,11 @@ test('the browser half is declared and follows the shipped bundle format', () =>
   // Both surfaces register: the row page and the Settings -> Plugins tab.
   assert.match(source, /'plugins\.row\.config'/);
   assert.match(source, /'settings\.plugins\.tab'/);
+  // ...and a real Settings-panel entry, which is the one users actually look for.
+  assert.match(source, /'settings\.section'/);
+  // The token field links straight to GitHub's pre-filled classic-token form.
+  assert.match(source, /https:\/\/github\.com\/settings\/tokens\/new/);
+  assert.match(source, /scopes=repo,workflow,gist,read:org,read:user,user:email,notifications,read:packages/);
 });
 
 test('the plugin config keys match the declared Config schema', () => {

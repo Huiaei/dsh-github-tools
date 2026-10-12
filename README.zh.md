@@ -66,7 +66,7 @@ bundle 补丁（`cordis.patch.yml`）只插入一行进程级插件，所有 age
 ### 设置放在哪里
 
 本包带一个浏览器半（`client/index.js`），所以配置可以直接在界面里改：
-**设置 → 插件 → `dsh-github-tools` 这一行 → 配置**。页面通过宿主的 `configForms` 服务读写，
+**设置 → GitHub 工具**，或 **设置 → 插件 → `dsh-github-tools` 这一行 → 配置**。页面通过宿主的 `configForms` 服务读写，
 按 Loader 行 id `github-tools` 寻址。
 
 没有界面时，同样的值就在本包的 `cordis.patch.yml` 那一行里，或写在 profile 的

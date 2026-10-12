@@ -46,6 +46,17 @@ window.__ModuleLoader__.load({
      */
     const CONFIG_ROW_ID = 'github-tools'
 
+    /**
+     * GitHub's classic-token form, pre-filled with the scopes this tool set uses and a
+     * recognisable description, so creating the credential is one click from the field.
+     */
+    const TOKEN_CREATE_URL = 'https://github.com/settings/tokens/new'
+      + '?description=DeepSeek%20Harness%20GitHub%20tools'
+      + '&scopes=repo,workflow,gist,read:org,read:user,user:email,notifications,read:packages'
+
+    /** The link colour, read as a theme token so it follows light/dark. */
+    const LINK = 'var(--dsw-alias-link, inherit)'
+
     /** The `plugins.row.config` key: `<package name>#<row id>`. */
     const SLOT_KEY = 'dsh-github-tools#github-tools'
 
@@ -61,6 +72,7 @@ window.__ModuleLoader__.load({
       sectionAdvanced: '高级',
       token: 'Personal Access Token',
       tokenHint: '留空即不修改已保存的令牌；未配置时依次回退到环境变量 GITHUB_PERSONAL_ACCESS_TOKEN、GITHUB_TOKEN、GH_TOKEN。',
+      tokenCreate: '去 GitHub 创建 token ↗',
       tokenConfigured: '已配置',
       tokenMissing: '未配置',
       toolsets: 'Toolset',
@@ -102,6 +114,7 @@ window.__ModuleLoader__.load({
       sectionAdvanced: 'Advanced',
       token: 'Personal access token',
       tokenHint: 'Leave blank to keep the stored token; when none is configured, GITHUB_PERSONAL_ACCESS_TOKEN, GITHUB_TOKEN and GH_TOKEN are consulted in that order.',
+      tokenCreate: 'Create a token on GitHub ↗',
       tokenConfigured: 'Configured',
       tokenMissing: 'Not set',
       toolsets: 'Toolsets',
@@ -266,7 +279,16 @@ window.__ModuleLoader__.load({
               key: field,
               id: 'gh-' + field,
               label: t(field),
-              hint: t(field + 'Hint'),
+              hint: React.createElement(React.Fragment, null,
+                t(field + 'Hint'),
+                ' ',
+                React.createElement('a', {
+                  href: TOKEN_CREATE_URL,
+                  target: '_blank',
+                  rel: 'noreferrer noopener',
+                  style: { color: LINK, textDecoration: 'underline' },
+                }, t('tokenCreate')),
+              ),
               configured: state.tokenConfigured === true,
               stateLabel: state.tokenConfigured === true ? t('tokenConfigured') : t('tokenMissing'),
               text: fieldState.text,
@@ -391,6 +413,18 @@ window.__ModuleLoader__.load({
         locale: NS,
         inject: () => Object.assign({ t }, face()),
       }, SettingsPanel))), 'dsh-github-tools: settings tab')
+
+      // The Settings panel's own navigation entry, beside the shipped sections and
+      // dsh-market's page. The row page above is where a plugin's configuration lives
+      // on the Plugins page; this is where someone who looks in Settings finds it.
+      ctx.effect(() => ctx.configForms.whileServed([CONFIG_ROW_ID], () => ctx.slots.inject('settings.section', () => ctx.slots.register({
+        name: 'settings.section',
+        id: NS,
+        order: 65,
+        label: () => t('title'),
+        locale: NS,
+        inject: () => Object.assign({ t }, face()),
+      }, SettingsPanel))), 'dsh-github-tools: settings section')
     }
 
     // `slots`, `locale` and `configForms` are all required before this half can do

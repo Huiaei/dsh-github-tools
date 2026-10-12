@@ -70,7 +70,7 @@ The default set (the upstream `default: true` toolsets) is `context`, `repos`, `
 ### Where the settings live
 
 The bundle ships a browser half, so its configuration is editable in the GUI:
-**Settings → Plugins → the `dsh-github-tools` row → Configure**. The page writes through the
+**Settings → GitHub tools**, or **Settings → Plugins → the `dsh-github-tools` row → Configure**. The page writes through the
 harness's `configForms` service, addressed by the Loader row id `github-tools`.
 
 Without the GUI the same values live in this bundle's `cordis.patch.yml` row, or in the
